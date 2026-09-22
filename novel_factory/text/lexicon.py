@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Iterator
 from functools import lru_cache
 from dataclasses import dataclass, field
 
@@ -91,8 +92,9 @@ CLIFFHANGER_PATTERNS: dict[str, list[str]] = {
         "두고 보",
     ],
     "미스터리": [
-        "왜", "무슨", "어떻게", "의문", "이상", "낌새", "수상", "알 수 없",
-        "짐작", "모를",
+        # "왜"는 단독일 때만 의미가 있다. 어절 경계만으로는 "왜곡"을 못 거른다.
+        "왜 ", "왜?", "왜지", "왜일까", "무슨", "어떻게", "의문", "이상한",
+        "낌새", "수상", "알 수 없", "짐작", "모를", "알 수가 없",
     ],
     "보상직전": [
         "열렸", "손을 뻗", "받았", "눈앞", "드디어", "마침내", "완성", "도착",
@@ -100,7 +102,7 @@ CLIFFHANGER_PATTERNS: dict[str, list[str]] = {
     ],
     "전투직전": [
         "칼을", "총을", "주먹", "자세를", "노려", "맞섰", "달려들", "겨눴",
-        "싸울", "덤벼",
+        "겨누", "싸울", "덤벼", "맞붙", "부딪", "정면으로", "몸을 날",
     ],
 }
 
@@ -153,6 +155,14 @@ NAME_STOPWORDS: set[str] = {
     "대표", "사장", "회장", "부장", "과장", "팀장", "직원", "비서", "기자",
     "말이", "말을", "말은", "일이", "일을", "것이", "것을", "것은", "때문",
     "정도", "이유", "방법", "문제", "상황", "경우", "관계", "이야기", "소리",
+    # 부정칭·수량·지시 표현
+    "아무", "아무도", "누군가", "무언가", "서로", "여러", "어느", "이런",
+    "그런", "저런", "얼마", "며칠", "하나", "모든", "각자", "대신", "만큼",
+    "잠깐", "한참", "이제", "이곳", "그곳", "저곳", "전부", "약간", "훨씬",
+    # 장면 묘사에 자주 오는 무생물 주어
+    "공기", "분위기", "침묵", "공간", "세상", "세계", "시간", "자리", "바람",
+    "햇빛", "어둠", "그림자", "전화", "화면", "서류", "계약", "회의", "결과",
+    "결정", "사실", "진실", "숫자", "가격", "조건", "제안", "대답", "질문",
 }
 
 
@@ -244,6 +254,28 @@ def find_hits(text: str, vocabulary: set[str] | frozenset[str]) -> Counter[str]:
     if pattern is None or not text:
         return Counter()
     return Counter(m.group(0) for m in pattern.finditer(text))
+
+
+def iter_hits(
+    text: str, vocabulary: set[str] | frozenset[str]
+) -> Iterator[tuple[int, str]]:
+    """사전 단어가 등장한 (문자 위치, 표면형)을 앞에서부터 돌려준다."""
+    pattern = _compile_vocabulary(frozenset(vocabulary))
+    if pattern is None or not text:
+        return
+    for m in pattern.finditer(text):
+        yield m.start(), m.group(0)
+
+
+def first_hit_position(
+    text: str, vocabulary: set[str] | frozenset[str]
+) -> tuple[int, str] | None:
+    """사전 단어가 처음 등장한 (문자 위치, 표면형). 없으면 None."""
+    pattern = _compile_vocabulary(frozenset(vocabulary))
+    if pattern is None or not text:
+        return None
+    m = pattern.search(text)
+    return (m.start(), m.group(0)) if m else None
 
 
 def count_hits(text: str, vocabulary: set[str] | frozenset[str]) -> int:
