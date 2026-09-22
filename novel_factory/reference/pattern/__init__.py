@@ -17,9 +17,9 @@ __all__ = [
     "ASPECTS",
     "AggregatedMetric",
     "GenreProfile",
-    "ReferenceWeights",
-    "aggregate_profiles",
     "PatternLibrary",
     "ReferencePattern",
+    "ReferenceWeights",
+    "aggregate_profiles",
     "derive_patterns",
 ]

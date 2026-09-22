@@ -35,8 +35,8 @@ class BasicStats:
     dialogue_ratio: float
     inner_ratio: float
     narration_ratio: float
-    action_density: float     # 서술 1,000자당 행동 묘사 어휘 등장 수
-    psych_density: float      # 서술 1,000자당 내면 묘사 어휘 등장 수
+    action_density: float  # 서술 1,000자당 행동 묘사 어휘 등장 수
+    psych_density: float  # 서술 1,000자당 내면 묘사 어휘 등장 수
     question_ratio: float
 
     def as_dict(self) -> dict[str, float | int]:
@@ -68,9 +68,7 @@ def analyze_basic_stats(metrics: list[EpisodeMetrics]) -> BasicStats:
     # 평균 문장 길이는 회차 평균의 평균이 아니라 전체 문장의 평균이어야 한다.
     # 회차 길이가 제각각일 때 둘은 다른 값이 나온다.
     total_sentences = sum(m.sentence_count for m in metrics)
-    weighted_sentence_chars = sum(
-        m.avg_sentence_chars * m.sentence_count for m in metrics
-    )
+    weighted_sentence_chars = sum(m.avg_sentence_chars * m.sentence_count for m in metrics)
     total_paragraphs = sum(m.paragraph_count for m in metrics)
     weighted_paragraph_chars = sum(
         m.avg_paragraph_chars * m.paragraph_count for m in metrics

@@ -20,12 +20,36 @@ EPISODES = 30
 CHARACTERS = ["김도윤", "박서연", "최민석", "강태호", "이준혁"]
 
 TITLES = [
-    "다시, 처음으로", "첫 번째 거래", "세광전자", "숨은 카드", "적의 얼굴",
-    "계약서 한 장", "무너지는 벽", "옛 친구", "검은 수첩", "이사회",
-    "배신의 값", "두 번째 기회", "역풍", "잠긴 문", "새벽의 결단",
-    "흔들리는 손", "숫자의 진실", "빈 사무실", "되돌아온 이름", "마지막 경고",
-    "균열", "폭로", "낯선 제안", "무너진 신뢰", "반격의 서막",
-    "회장의 유언", "선택", "최후의 협상", "끝과 시작", "남겨진 것들",
+    "다시, 처음으로",
+    "첫 번째 거래",
+    "세광전자",
+    "숨은 카드",
+    "적의 얼굴",
+    "계약서 한 장",
+    "무너지는 벽",
+    "옛 친구",
+    "검은 수첩",
+    "이사회",
+    "배신의 값",
+    "두 번째 기회",
+    "역풍",
+    "잠긴 문",
+    "새벽의 결단",
+    "흔들리는 손",
+    "숫자의 진실",
+    "빈 사무실",
+    "되돌아온 이름",
+    "마지막 경고",
+    "균열",
+    "폭로",
+    "낯선 제안",
+    "무너진 신뢰",
+    "반격의 서막",
+    "회장의 유언",
+    "선택",
+    "최후의 협상",
+    "끝과 시작",
+    "남겨진 것들",
 ]
 
 NARRATION = [
@@ -123,7 +147,9 @@ def build_episode(n: int, rng: random.Random) -> tuple[str, str]:
 
 def build_novel(episodes: int = EPISODES, seed: int = 20260322) -> str:
     rng = random.Random(seed)
-    parts = ["회귀한 인수합병가\n\n프롤로그\n\n죽었다고 생각한 순간, 그는 다시 눈을 떴다.\n2026년 3월 1일. 모든 것이 시작되기 전이었다.\n"]
+    parts = [
+        "회귀한 인수합병가\n\n프롤로그\n\n죽었다고 생각한 순간, 그는 다시 눈을 떴다.\n2026년 3월 1일. 모든 것이 시작되기 전이었다.\n"
+    ]
     for n in range(1, episodes + 1):
         title, body = build_episode(n, rng)
         parts.append(f"{title}\n\n{body}\n")
@@ -166,7 +192,7 @@ def _xhtml(title: str, body: str) -> bytes:
         '<html xmlns="http://www.w3.org/1999/xhtml"><head>'
         f"<title>{_escape(title)}</title></head><body>\n"
         f"    <h2>{_escape(title)}</h2>\n{paragraphs}\n</body></html>"
-    ).encode("utf-8")
+    ).encode()
 
 
 def _escape(s: str) -> str:
@@ -175,7 +201,12 @@ def _escape(s: str) -> str:
 
 def write_epub(episodes: int = EPISODES, seed: int = 20260322) -> Path:
     rng = random.Random(seed)
-    chapters = [("프롤로그", "죽었다고 생각한 순간, 그는 다시 눈을 떴다.\n\n2026년 3월 1일. 모든 것이 시작되기 전이었다.")]
+    chapters = [
+        (
+            "프롤로그",
+            "죽었다고 생각한 순간, 그는 다시 눈을 떴다.\n\n2026년 3월 1일. 모든 것이 시작되기 전이었다.",
+        )
+    ]
     for n in range(1, episodes + 1):
         chapters.append(build_episode(n, rng))
 
@@ -205,18 +236,16 @@ def write_epub(episodes: int = EPISODES, seed: int = 20260322) -> Path:
     ).encode("utf-8")
 
     container = (
-        '<?xml version="1.0" encoding="utf-8"?>\n'
-        '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
-        "  <rootfiles>\n"
-        '    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n'
-        "  </rootfiles>\n</container>"
-    ).encode("utf-8")
+        b'<?xml version="1.0" encoding="utf-8"?>\n'
+        b'<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
+        b"  <rootfiles>\n"
+        b'    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n'
+        b"  </rootfiles>\n</container>"
+    )
 
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         # mimetype은 무압축으로 맨 앞에 와야 한다는 게 EPUB 규격이다.
-        zf.writestr(
-            zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED
-        )
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
         zf.writestr("META-INF/container.xml", container)
         zf.writestr("OEBPS/content.opf", opf)
         for name, data in files:
@@ -230,8 +259,8 @@ def write_docx(episodes: int = 8, seed: int = 20260322) -> Path:
     body_parts: list[str] = []
 
     def para(text: str, style: str | None = None) -> str:
-        ppr = f"<w:pPr><w:pStyle w:val=\"{style}\"/></w:pPr>" if style else ""
-        return f"<w:p>{ppr}<w:r><w:t xml:space=\"preserve\">{_escape(text)}</w:t></w:r></w:p>"
+        ppr = f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style else ""
+        return f'<w:p>{ppr}<w:r><w:t xml:space="preserve">{_escape(text)}</w:t></w:r></w:p>'
 
     body_parts.append(para("회귀한 인수합병가", "Title"))
     for n in range(1, episodes + 1):
@@ -250,30 +279,30 @@ def write_docx(episodes: int = 8, seed: int = 20260322) -> Path:
 
     core = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-        '<cp:coreProperties '
+        "<cp:coreProperties "
         'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
         'xmlns:dc="http://purl.org/dc/elements/1.1/">'
         "<dc:title>회귀한 인수합병가</dc:title><dc:creator>테스트 작가</dc:creator>"
         "</cp:coreProperties>"
-    ).encode("utf-8")
+    ).encode()
 
     content_types = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-        '<Default Extension="xml" ContentType="application/xml"/>'
-        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-        '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
-        "</Types>"
-    ).encode("utf-8")
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        b'<Default Extension="xml" ContentType="application/xml"/>'
+        b'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        b'<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        b'<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+        b"</Types>"
+    )
 
     rels = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
-        "</Relationships>"
-    ).encode("utf-8")
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        b'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+        b"</Relationships>"
+    )
 
     path = FIXTURE_DIR / "sample_novel.docx"
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -308,7 +337,11 @@ def write_pdf() -> Path:
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
         b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        b"<< /Length "
+        + str(len(stream)).encode()
+        + b" >>\nstream\n"
+        + stream
+        + b"\nendstream",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     ]
 

@@ -16,8 +16,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from novel_factory.reference.analyzer.basic_stats import BasicStats
@@ -76,7 +76,7 @@ class ReferenceProfile:
     source_format: str = ""
     split_method: str = ""
     analyzed_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+        default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds")
     )
     schema_version: int = PROFILE_SCHEMA_VERSION
 
@@ -119,7 +119,9 @@ class ReferenceProfile:
             "avg_paragraph_length": round(b.avg_paragraph_chars, 1) if b else 0.0,
             "plot_speed": p.plot_speed if p else "unknown",
             "pov": s.pov if s else "판정불가",
-            "protagonist_count": self.characters.protagonist_count if self.characters else 0,
+            "protagonist_count": self.characters.protagonist_count
+            if self.characters
+            else 0,
             "antagonist_count": self.characters.antagonist_count if self.characters else 0,
             "foreshadow_avg_span": (
                 round(self.foreshadowing.avg_span, 2) if self.foreshadowing else 0.0
@@ -129,7 +131,9 @@ class ReferenceProfile:
             ),
         }
 
-    def as_dict(self, *, include_names: bool = False, verbose: bool = False) -> dict[str, Any]:
+    def as_dict(
+        self, *, include_names: bool = False, verbose: bool = False
+    ) -> dict[str, Any]:
         """저장·전송용 표현.
 
         include_names는 관리자 화면에서 분석 결과를 눈으로 확인할 때만 쓴다.
@@ -183,7 +187,7 @@ class ReferenceProfile:
     @classmethod
     def from_stored(
         cls, stored: dict[str, Any], *, reference_id: str, title: str = "", genre: str = ""
-    ) -> "ReferenceProfile":
+    ) -> ReferenceProfile:
         """DB에 저장된 as_dict() 결과에서 집계용 Profile을 복원한다.
 
         분석기 객체를 되살리지는 않는다. 집계(aggregate_profiles)가 실제로
@@ -238,7 +242,12 @@ class ReferenceProfile:
                 "",
             ]
         if self.pacing:
-            lines += ["■ 전개", self.pacing.describe(), f"전개 속도: {self.pacing.plot_speed}", ""]
+            lines += [
+                "■ 전개",
+                self.pacing.describe(),
+                f"전개 속도: {self.pacing.plot_speed}",
+                "",
+            ]
         lines += ["■ 회차 구조", self.episode_shape.describe(), ""]
         if self.cliffhanger:
             lines += ["■ 클리프행어", self.cliffhanger.describe(), ""]

@@ -2,4 +2,4 @@
 
 from novel_factory.app.routers import novels, references
 
-__all__ = ["references", "novels"]
+__all__ = ["novels", "references"]

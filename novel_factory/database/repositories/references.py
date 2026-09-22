@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -70,7 +70,7 @@ class ReferenceRepository(BaseRepository[ReferenceNovel]):
         ref.episode_count = episode_count
         ref.warnings = warnings or []
         ref.status = "analyzed"
-        ref.analyzed_at = datetime.now(timezone.utc)
+        ref.analyzed_at = datetime.now(UTC)
         self.session.flush()
         return ref
 
@@ -207,9 +207,7 @@ class PatternRepository(BaseRepository[ReferencePatternRow]):
             ReferencePatternRow.confidence >= min_confidence
         )
         if genre:
-            stmt = stmt.where(
-                ReferencePatternRow.genre.in_([genre, ""])
-            )
+            stmt = stmt.where(ReferencePatternRow.genre.in_([genre, ""]))
         if aspects:
             stmt = stmt.where(ReferencePatternRow.aspect.in_(aspects))
         stmt = stmt.order_by(ReferencePatternRow.confidence.desc()).limit(limit)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from novel_factory.reference.analyzer.episode_metrics import EpisodeMetrics
 
@@ -38,11 +39,11 @@ def moving_average(values: list[float], window: int) -> list[float]:
 
 @dataclass(slots=True)
 class EmotionCurve:
-    series: list[float]                  # 회차별 원 감정 극성
-    smoothed: list[float]                # 이동평균
-    stages: list[str]                    # 회차별 단계 라벨
-    volatility: float                    # 곡선의 표준편차
-    swing_count: int                     # 부호가 뒤집힌 횟수
+    series: list[float]  # 회차별 원 감정 극성
+    smoothed: list[float]  # 이동평균
+    stages: list[str]  # 회차별 단계 라벨
+    volatility: float  # 곡선의 표준편차
+    swing_count: int  # 부호가 뒤집힌 횟수
     lowest_episode: int | None
     highest_episode: int | None
     stage_distribution: dict[str, float] = field(default_factory=dict)
@@ -68,7 +69,7 @@ class EmotionCurve:
             if not compressed or compressed[-1] != stage:
                 compressed.append(stage)
         if len(compressed) > limit:
-            compressed = compressed[:limit] + ["…"]
+            compressed = [*compressed[:limit], "…"]
         return "\n↓\n".join(compressed)
 
 
@@ -106,11 +107,7 @@ def analyze_emotion(
             # 반격 이후에는 저점을 현재 위치로 다시 잡는다.
             trough = value
 
-    swings = sum(
-        1
-        for a, b in zip(smoothed, smoothed[1:])
-        if (a < 0 <= b) or (b < 0 <= a)
-    )
+    swings = sum(1 for a, b in pairwise(smoothed) if (a < 0 <= b) or (b < 0 <= a))
     lowest = min(metrics, key=lambda m: m.valence)
     highest = max(metrics, key=lambda m: m.valence)
 

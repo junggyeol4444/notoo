@@ -55,9 +55,7 @@ class EpisodeRepository(BaseRepository[Episode]):
 
     def get_by_number(self, novel_id: int, number: int) -> Episode | None:
         return self.session.scalar(
-            select(Episode).where(
-                Episode.novel_id == novel_id, Episode.number == number
-            )
+            select(Episode).where(Episode.novel_id == novel_id, Episode.number == number)
         )
 
     def require_by_number(self, novel_id: int, number: int) -> Episode:
@@ -72,7 +70,9 @@ class EpisodeRepository(BaseRepository[Episode]):
         )
         return int(value or 0)
 
-    def recent(self, novel_id: int, count: int = 5, before: int | None = None) -> list[Episode]:
+    def recent(
+        self, novel_id: int, count: int = 5, before: int | None = None
+    ) -> list[Episode]:
         """최근 회차를 번호 오름차순으로 돌려준다.
 
         Writer에게 "최근 회차 요약"을 넘길 때 쓴다 (기획안 31번).

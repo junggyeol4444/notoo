@@ -21,15 +21,15 @@ from novel_factory.reference.profile import ReferenceProfile
 
 #: 참고 항목 (기획안 17번 '참고할 요소'). 가중치를 따로 줄 수 있는 단위.
 ASPECTS: tuple[str, ...] = (
-    "pacing",             # 전개 속도
-    "episode_shape",      # 회차 구조
-    "cliffhanger",        # 클리프행어
-    "foreshadowing",      # 복선
-    "relationship",       # 캐릭터 관계 변화
-    "event_interval",     # 사건 발생 주기
-    "emotion",            # 감정곡선
-    "dialogue",           # 대사 비율
-    "style",              # 문체
+    "pacing",  # 전개 속도
+    "episode_shape",  # 회차 구조
+    "cliffhanger",  # 클리프행어
+    "foreshadowing",  # 복선
+    "relationship",  # 캐릭터 관계 변화
+    "event_interval",  # 사건 발생 주기
+    "emotion",  # 감정곡선
+    "dialogue",  # 대사 비율
+    "style",  # 문체
 )
 
 #: 각 집계 항목이 어느 참고 항목에 속하는지
@@ -71,7 +71,7 @@ class ReferenceWeights:
         return self.for_aspect(_METRIC_ASPECT.get(metric, "pacing"))
 
     @classmethod
-    def uniform(cls, reference_id: str, value: float = 1.0) -> "ReferenceWeights":
+    def uniform(cls, reference_id: str, value: float = 1.0) -> ReferenceWeights:
         return cls(reference_id=reference_id, default=value)
 
 
@@ -179,7 +179,7 @@ def _weighted_mean(values: list[float], weights: list[float]) -> float:
     total_w = sum(weights)
     if total_w <= 0:
         return statistics.fmean(values) if values else 0.0
-    return sum(v * w for v, w in zip(values, weights)) / total_w
+    return sum(v * w for v, w in zip(values, weights, strict=True)) / total_w
 
 
 def _aggregate_distribution(
@@ -240,10 +240,7 @@ def aggregate_profiles(
         )
 
     episode_shape = _aggregate_distribution(
-        [
-            (p.episode_shape.ratios, w_for(p).for_aspect("episode_shape"))
-            for p in profiles
-        ]
+        [(p.episode_shape.ratios, w_for(p).for_aspect("episode_shape")) for p in profiles]
     )
     cliffhanger = _aggregate_distribution(
         [
@@ -261,9 +258,7 @@ def aggregate_profiles(
     )
 
     speeds = [p.pacing.plot_speed for p in profiles if p.pacing]
-    plot_speed = (
-        statistics.mode(speeds) if speeds else "unknown"
-    )
+    plot_speed = statistics.mode(speeds) if speeds else "unknown"
 
     # 고유 특징: 평균에서 표준편차의 outlier_z배 이상 벗어난 항목
     outliers: dict[str, list[str]] = {}

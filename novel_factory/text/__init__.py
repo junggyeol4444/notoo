@@ -5,10 +5,10 @@
 전제로 한 규칙 기반 처리다.
 """
 
+from novel_factory.text.dialogue import Segment, SegmentKind, segment_text, speech_stats
 from novel_factory.text.encoding import decode_bytes, detect_encoding
 from novel_factory.text.normalize import normalize_text
 from novel_factory.text.sentence import split_paragraphs, split_sentences
-from novel_factory.text.dialogue import Segment, SegmentKind, segment_text, speech_stats
 from novel_factory.text.tokens import (
     char_ngrams,
     count_hangul,
@@ -18,23 +18,23 @@ from novel_factory.text.tokens import (
 )
 
 __all__ = [
-    "decode_bytes",
-    "detect_encoding",
-    "normalize_text",
-    "split_sentences",
-    "split_paragraphs",
     "Segment",
     "SegmentKind",
-    "segment_text",
-    "speech_stats",
-    "syllables",
-    "eojeols",
-    "count_hangul",
     "char_ngrams",
+    "count_hangul",
+    "decode_bytes",
+    "detect_encoding",
+    "eojeols",
+    "normalize_text",
+    "segment_text",
     "shingle_hashes",
+    "speech_stats",
+    "split_paragraphs",
+    "split_sentences",
+    "syllables",
 ]
 
-from novel_factory.text.lexicon import (  # noqa: E402
+from novel_factory.text.lexicon import (
     DEFAULT_LEXICON,
     LexiconBundle,
     count_hits,
@@ -42,14 +42,14 @@ from novel_factory.text.lexicon import (  # noqa: E402
     count_similes,
     weighted_hits,
 )
-from novel_factory.text.tokens import jaccard  # noqa: E402
+from novel_factory.text.tokens import jaccard
 
 __all__ += [
     "DEFAULT_LEXICON",
     "LexiconBundle",
     "count_hits",
-    "count_similes",
     "count_onomatopoeia",
-    "weighted_hits",
+    "count_similes",
     "jaccard",
+    "weighted_hits",
 ]

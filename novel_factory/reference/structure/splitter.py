@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from novel_factory.reference.parser.base import ParsedDocument
 from novel_factory.text.normalize import normalize_text
@@ -20,14 +21,34 @@ MAX_MARKER_LINE_CHARS = 60
 _NUM = r"(?P<num>\d{1,4})"
 MARKER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # 제12화 / 제 12 화 / 12화 / 012화. / 12화 - 제목
-    ("화", re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*화(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$")),
+    (
+        "화",
+        re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*화(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$"),
+    ),
     # 제3장 / 3장
-    ("장", re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*장(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$")),
+    (
+        "장",
+        re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*장(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$"),
+    ),
     # 제3권은 회차가 아니라 상위 단위지만, 마커가 이것뿐이면 회차로 쓴다.
-    ("권", re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*권(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$")),
-    ("회", re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*회(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$")),
-    ("chapter", re.compile(rf"^\s*(?:chapter|chap\.?|ch\.?)\s*{_NUM}\s*[.:\-–—]?\s*(?P<title>.*)$", re.I)),
-    ("episode", re.compile(rf"^\s*(?:episode|ep)\.?\s*{_NUM}\s*[.:\-–—]?\s*(?P<title>.*)$", re.I)),
+    (
+        "권",
+        re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*권(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$"),
+    ),
+    (
+        "회",
+        re.compile(rf"^\s*(?:제\s*)?{_NUM}\s*회(?![가-힣])\s*[.:\-–—]?\s*(?P<title>.*)$"),
+    ),
+    (
+        "chapter",
+        re.compile(
+            rf"^\s*(?:chapter|chap\.?|ch\.?)\s*{_NUM}\s*[.:\-–—]?\s*(?P<title>.*)$", re.I
+        ),
+    ),
+    (
+        "episode",
+        re.compile(rf"^\s*(?:episode|ep)\.?\s*{_NUM}\s*[.:\-–—]?\s*(?P<title>.*)$", re.I),
+    ),
     ("hash", re.compile(rf"^\s*#\s*{_NUM}\s*[.:\-–—]?\s*(?P<title>.*)$")),
     # 숫자만 있는 줄 (신뢰도 낮음. 다른 마커가 하나도 없을 때만 쓴다.)
     ("bare", re.compile(rf"^\s*{_NUM}\s*[.:]?\s*$")),
@@ -35,10 +56,26 @@ MARKER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 # 번호가 없는 특수 회차
 SPECIAL_MARKERS: list[tuple[str, re.Pattern[str]]] = [
-    ("프롤로그", re.compile(r"^\s*(?:prologue|프롤로그|서장|서막)\s*[.:\-–—]?\s*(?P<title>.*)$", re.I)),
-    ("에필로그", re.compile(r"^\s*(?:epilogue|에필로그|종장)\s*[.:\-–—]?\s*(?P<title>.*)$", re.I)),
-    ("외전", re.compile(r"^\s*(?:외전|번외|번외편|side\s*story)\s*[.:\-–—]?\s*(?P<title>.*)$", re.I)),
-    ("작가의말", re.compile(r"^\s*(?:작가의\s*말|후기|작가\s*후기)\s*[.:\-–—]?\s*(?P<title>.*)$")),
+    (
+        "프롤로그",
+        re.compile(
+            r"^\s*(?:prologue|프롤로그|서장|서막)\s*[.:\-–—]?\s*(?P<title>.*)$", re.I
+        ),
+    ),
+    (
+        "에필로그",
+        re.compile(r"^\s*(?:epilogue|에필로그|종장)\s*[.:\-–—]?\s*(?P<title>.*)$", re.I),
+    ),
+    (
+        "외전",
+        re.compile(
+            r"^\s*(?:외전|번외|번외편|side\s*story)\s*[.:\-–—]?\s*(?P<title>.*)$", re.I
+        ),
+    ),
+    (
+        "작가의말",
+        re.compile(r"^\s*(?:작가의\s*말|후기|작가\s*후기)\s*[.:\-–—]?\s*(?P<title>.*)$"),
+    ),
 ]
 
 # 본문이 아니라 부가 정보인 회차. 통계에서 제외한다.
@@ -49,13 +86,13 @@ NON_STORY_KINDS = frozenset({"작가의말"})
 class Episode:
     """분리된 한 회차."""
 
-    index: int                 # 0부터 시작하는 순서
-    number: int | None         # 마커에서 읽은 회차 번호 (없으면 None)
+    index: int  # 0부터 시작하는 순서
+    number: int | None  # 마커에서 읽은 회차 번호 (없으면 None)
     title: str
     text: str
-    kind: str = "화"           # 어떤 마커로 잡혔는지
-    is_story: bool = True      # 작가의 말 등은 False
-    seq: int = 0               # 스토리 회차 중 몇 번째인지 (1부터). 전개 분석은 이 값을 쓴다.
+    kind: str = "화"  # 어떤 마커로 잡혔는지
+    is_story: bool = True  # 작가의 말 등은 False
+    seq: int = 0  # 스토리 회차 중 몇 번째인지 (1부터). 전개 분석은 이 값을 쓴다.
 
     @property
     def char_count(self) -> int:
@@ -93,7 +130,7 @@ def assign_sequence(episodes: list[Episode]) -> list[Episode]:
 @dataclass(slots=True)
 class SplitResult:
     episodes: list[Episode]
-    method: str                # "native" | "marker" | "fallback"
+    method: str  # "native" | "marker" | "fallback"
     marker_kind: str | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -135,13 +172,19 @@ def _scan_markers(text: str) -> dict[str, list[tuple[int, int, int | None, str]]
     return found
 
 
-def _pick_marker_kind(found: dict[str, list[tuple[int, int, int | None, str]]]) -> str | None:
+def _pick_marker_kind(
+    found: dict[str, list[tuple[int, int, int | None, str]]],
+) -> str | None:
     """가장 믿을 만한 마커 종류를 고른다.
 
     개수가 많고, 번호가 단조 증가하는 쪽이 진짜 회차 마커다.
     "bare"(숫자만 있는 줄)는 다른 후보가 전혀 없을 때만 쓴다.
     """
-    candidates = {k: v for k, v in found.items() if k not in ("bare",) and k not in {n for n, _ in SPECIAL_MARKERS}}
+    candidates = {
+        k: v
+        for k, v in found.items()
+        if k not in ("bare",) and k not in {n for n, _ in SPECIAL_MARKERS}
+    }
     if not candidates:
         candidates = {k: v for k, v in found.items() if k == "bare"}
     if not candidates:
@@ -152,7 +195,7 @@ def _pick_marker_kind(found: dict[str, list[tuple[int, int, int | None, str]]]) 
         nums = [n for _, _, n, _ in hits if n is not None]
         if len(nums) < 2:
             return (0.0, len(hits))
-        increasing = sum(1 for a, b in zip(nums, nums[1:]) if b > a)
+        increasing = sum(1 for a, b in pairwise(nums) if b > a)
         monotonic = increasing / (len(nums) - 1)
         return (monotonic * len(hits), len(hits))
 

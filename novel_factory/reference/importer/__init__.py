@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from novel_factory.config import Settings, get_settings
@@ -41,7 +41,7 @@ class ImportedReference:
     author: str | None = None
     native_chapter_count: int = 0
     imported_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+        default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds")
     )
     warnings: list[str] = field(default_factory=list)
 
@@ -148,9 +148,9 @@ def import_bytes(
 
 
 __all__ = [
+    "SUPPORTED_EXTENSIONS",
     "ImportedReference",
     "check_supported",
-    "import_file",
     "import_bytes",
-    "SUPPORTED_EXTENSIONS",
+    "import_file",
 ]

@@ -1,17 +1,17 @@
 """참고소설 API (기획안 53번).
 
-    POST /references                        등록
-    POST /references/{id}/analyze           분석
-    GET  /references                        목록
-    GET  /references/{id}                   Profile
-    GET  /references/{id}/report            사람용 요약
-    POST /references/aggregate              다중 집계 → GenreProfile + 패턴
-    POST /references/similarity             유사도 검사
+POST /references                        등록
+POST /references/{id}/analyze           분석
+GET  /references                        목록
+GET  /references/{id}                   Profile
+GET  /references/{id}/report            사람용 요약
+POST /references/aggregate              다중 집계 → GenreProfile + 패턴
+POST /references/similarity             유사도 검사
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -199,7 +199,7 @@ def analyze_reference(
     )
     if options.store_fingerprints:
         repo.save_fingerprints(ref, result.metrics)
-    ref.analyzed_at = datetime.now(timezone.utc)
+    ref.analyzed_at = datetime.now(UTC)
 
     return ReferenceProfileOut(
         reference_id=reference_id,
@@ -244,7 +244,9 @@ def aggregate_references(
             )
         profiles.append(
             ReferenceProfile.from_stored(
-                ref.profile, reference_id=ref.reference_id, title=ref.title,
+                ref.profile,
+                reference_id=ref.reference_id,
+                title=ref.title,
                 genre=ref.genre,
             )
         )

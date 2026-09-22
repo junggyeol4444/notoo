@@ -89,9 +89,7 @@ async def _missing_dep(request: Request, exc: MissingDependencyError) -> JSONRes
 
 @app.exception_handler(ParseError)
 async def _parse_error(request: Request, exc: ParseError) -> JSONResponse:
-    return JSONResponse(
-        status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": str(exc)}
-    )
+    return JSONResponse(status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": str(exc)})
 
 
 @app.exception_handler(NovelFactoryError)

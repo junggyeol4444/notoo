@@ -24,7 +24,6 @@ from novel_factory.text.lexicon import (
     count_hits,
     count_onomatopoeia,
     count_similes,
-    find_hits,
     first_hit_position,
     weighted_hits,
 )
@@ -46,8 +45,8 @@ class EpisodeMetrics:
 
     sentence_count: int
     avg_sentence_chars: float
-    short_sentence_ratio: float       # 15자 이하 문장 비율
-    long_sentence_ratio: float        # 40자 이상 문장 비율
+    short_sentence_ratio: float  # 15자 이하 문장 비율
+    long_sentence_ratio: float  # 40자 이상 문장 비율
 
     paragraph_count: int
     avg_paragraph_chars: float
@@ -57,19 +56,19 @@ class EpisodeMetrics:
     narration_ratio: float
     dialogue_line_count: int
 
-    action_ratio: float               # 서술 안에서 행동 묘사가 차지하는 비중
-    psych_ratio: float                # 서술 안에서 내면 묘사가 차지하는 비중
+    action_ratio: float  # 서술 안에서 행동 묘사가 차지하는 비중
+    psych_ratio: float  # 서술 안에서 내면 묘사가 차지하는 비중
 
-    event_score: float                # 길이로 정규화한 사건 강도
+    event_score: float  # 길이로 정규화한 사건 강도
     event_hits: Counter[str]
-    valence: float                    # -1(절망) ~ +1(안정/보상)
+    valence: float  # -1(절망) ~ +1(안정/보상)
 
     simile_per_1k: float
     onomatopoeia_per_1k: float
-    question_ratio: float             # 문장 중 의문문 비율
+    question_ratio: float  # 문장 중 의문문 비율
 
-    shape: dict[str, float]           # 도입/전개/갈등/보상/반전/클리프행어 비율
-    tail_text: str                    # 클리프행어 판정에 쓸 회차 말미
+    shape: dict[str, float]  # 도입/전개/갈등/보상/반전/클리프행어 비율
+    tail_text: str  # 클리프행어 판정에 쓸 회차 말미
     first_event_position: float | None  # 회차 안에서 첫 사건어가 나온 상대 위치 0~1
 
     name_hits: Counter[str] = field(default_factory=Counter)
@@ -150,9 +149,7 @@ def compute_metrics(
     paragraphs = split_paragraphs(text)
 
     segments = segment_text(text)
-    narration_text = "\n".join(
-        s.text for s in segments if s.kind is SegmentKind.NARRATION
-    )
+    narration_text = "\n".join(s.text for s in segments if s.kind is SegmentKind.NARRATION)
     narration_chars = max(syllables(narration_text), 1)
 
     texture: EpisodeTexture = analyze_episode_texture(text)
@@ -178,9 +175,7 @@ def compute_metrics(
         dialogue_ratio=texture.dialogue_ratio,
         inner_ratio=texture.inner_ratio,
         narration_ratio=texture.narration_ratio,
-        dialogue_line_count=sum(
-            1 for s in segments if s.kind is SegmentKind.DIALOGUE
-        ),
+        dialogue_line_count=sum(1 for s in segments if s.kind is SegmentKind.DIALOGUE),
         # 행동/내면 묘사는 서술 안에서만 센다. 대사 안의 동사는 묘사가 아니다.
         action_ratio=count_hits(narration_text, lex.action) * 100.0 / narration_chars,
         psych_ratio=count_hits(narration_text, lex.psych) * 100.0 / narration_chars,

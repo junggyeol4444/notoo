@@ -23,16 +23,12 @@ class CharacterRepository(BaseRepository[Character]):
 
     def get_by_code(self, novel_id: int, code: str) -> Character | None:
         return self.session.scalar(
-            select(Character).where(
-                Character.novel_id == novel_id, Character.code == code
-            )
+            select(Character).where(Character.novel_id == novel_id, Character.code == code)
         )
 
     def get_by_name(self, novel_id: int, name: str) -> Character | None:
         return self.session.scalar(
-            select(Character).where(
-                Character.novel_id == novel_id, Character.name == name
-            )
+            select(Character).where(Character.novel_id == novel_id, Character.name == name)
         )
 
     def require_by_code(self, novel_id: int, code: str) -> Character:

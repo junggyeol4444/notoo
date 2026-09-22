@@ -13,13 +13,13 @@ FORESHADOW_OPEN_STATES: tuple[str, ...] = ("OPEN", "DEVELOPING")
 class WorldRepository(BaseRepository[WorldEntry]):
     model = WorldEntry
 
-    def for_novel(
-        self, novel_id: int, category: str | None = None
-    ) -> list[WorldEntry]:
+    def for_novel(self, novel_id: int, category: str | None = None) -> list[WorldEntry]:
         stmt = select(WorldEntry).where(WorldEntry.novel_id == novel_id)
         if category:
             stmt = stmt.where(WorldEntry.category == category)
-        return list(self.session.scalars(stmt.order_by(WorldEntry.category, WorldEntry.name)))
+        return list(
+            self.session.scalars(stmt.order_by(WorldEntry.category, WorldEntry.name))
+        )
 
     def get_by_name(self, novel_id: int, category: str, name: str) -> WorldEntry | None:
         return self.session.scalar(
@@ -36,7 +36,10 @@ class WorldRepository(BaseRepository[WorldEntry]):
         entry = self.get_by_name(novel_id, category, name)
         if entry is None:
             entry = WorldEntry(
-                novel_id=novel_id, category=category, name=name, **fields  # type: ignore[arg-type]
+                novel_id=novel_id,
+                category=category,
+                name=name,
+                **fields,  # type: ignore[arg-type]
             )
             return self.add(entry)
         for key, value in fields.items():
@@ -50,7 +53,7 @@ class WorldRepository(BaseRepository[WorldEntry]):
             .where(WorldEntry.novel_id == novel_id)
             .group_by(WorldEntry.category)
         )
-        return {category: count for category, count in rows}
+        return dict(rows)
 
 
 class TimelineRepository(BaseRepository[TimelineEvent]):
@@ -95,9 +98,7 @@ class TimelineRepository(BaseRepository[TimelineEvent]):
 class ForeshadowingRepository(BaseRepository[Foreshadowing]):
     model = Foreshadowing
 
-    def for_novel(
-        self, novel_id: int, status: str | None = None
-    ) -> list[Foreshadowing]:
+    def for_novel(self, novel_id: int, status: str | None = None) -> list[Foreshadowing]:
         stmt = select(Foreshadowing).where(Foreshadowing.novel_id == novel_id)
         if status:
             stmt = stmt.where(Foreshadowing.status == status)

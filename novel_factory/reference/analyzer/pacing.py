@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from novel_factory.reference.analyzer.episode_metrics import EpisodeMetrics
 
@@ -37,7 +38,7 @@ def _quantile(values: list[float], q: float) -> float:
 
 
 def _intervals(seqs: list[int]) -> list[int]:
-    return [b - a for a, b in zip(seqs, seqs[1:])]
+    return [b - a for a, b in pairwise(seqs)]
 
 
 @dataclass(slots=True)
@@ -56,7 +57,7 @@ class PacingProfile:
     major_event_interval: float = 0.0
     rest_episode_ratio: float = 0.0
     climax_episode: int | None = None
-    climax_position: float | None = None   # 작품 전체에서의 상대 위치 0~1
+    climax_position: float | None = None  # 작품 전체에서의 상대 위치 0~1
     plot_speed: str = "unknown"
 
     def as_dict(self) -> dict[str, object]:
@@ -76,9 +77,7 @@ class PacingProfile:
             "rest_episode_ratio": round(self.rest_episode_ratio, 4),
             "climax_episode": self.climax_episode,
             "climax_position": (
-                round(self.climax_position, 3)
-                if self.climax_position is not None
-                else None
+                round(self.climax_position, 3) if self.climax_position is not None else None
             ),
             "plot_speed": self.plot_speed,
         }
@@ -122,15 +121,9 @@ def analyze_pacing(
     rest = [m.seq for m in metrics if not flat and m.event_score <= rest_cut]
 
     first_event = next((m for m in metrics if m.event_score > 0), None)
-    first_conflict = next(
-        (m.seq for m in metrics if m.shape.get("갈등", 0.0) > 0.0), None
-    )
-    first_reward = next(
-        (m.seq for m in metrics if m.shape.get("보상", 0.0) > 0.0), None
-    )
-    first_twist = next(
-        (m.seq for m in metrics if m.shape.get("반전", 0.0) > 0.0), None
-    )
+    first_conflict = next((m.seq for m in metrics if m.shape.get("갈등", 0.0) > 0.0), None)
+    first_reward = next((m.seq for m in metrics if m.shape.get("보상", 0.0) > 0.0), None)
+    first_twist = next((m.seq for m in metrics if m.shape.get("반전", 0.0) > 0.0), None)
 
     climax = max(metrics, key=lambda m: m.event_score) if not flat else None
     last_seq = metrics[-1].seq or len(metrics)

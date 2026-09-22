@@ -76,7 +76,7 @@ WHOLE_WORK = -1
 @dataclass(slots=True)
 class SimilarityHit:
     reference_id: str
-    episode_seq: int      # WHOLE_WORK이면 작품 전체와의 대조 결과
+    episode_seq: int  # WHOLE_WORK이면 작품 전체와의 대조 결과
     jaccard: float
     containment: float
 

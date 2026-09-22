@@ -80,9 +80,7 @@ class CliffhangerProfile:
     def describe(self) -> str:
         """기획안 8번 예시 형태의 요약."""
         lines = [f"회차말 클리프행어 사용률: {self.rate * 100:.0f}%", "", "주요 유형:"]
-        for kind, ratio in sorted(
-            self.distribution.items(), key=lambda kv: -kv[1]
-        ):
+        for kind, ratio in sorted(self.distribution.items(), key=lambda kv: -kv[1]):
             if ratio > 0:
                 lines.append(f"{kind} {ratio * 100:.0f}%")
         return "\n".join(lines)
@@ -155,9 +153,7 @@ def analyze_cliffhangers(
     *,
     lexicon: LexiconBundle | None = None,
 ) -> CliffhangerProfile:
-    verdicts = [
-        classify_cliffhanger(m.tail_text, m.seq, lexicon=lexicon) for m in metrics
-    ]
+    verdicts = [classify_cliffhanger(m.tail_text, m.seq, lexicon=lexicon) for m in metrics]
     counts: Counter[str] = Counter(v.kind for v in verdicts)
     with_hook = sum(1 for v in verdicts if v.has_cliffhanger)
     total_hooks = max(with_hook, 1)

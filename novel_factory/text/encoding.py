@@ -35,11 +35,12 @@ def _plausibility(text: str) -> float:
     good = 0
     for ch in sample:
         code = ord(ch)
-        if 0xAC00 <= code <= 0xD7A3:  # 한글 음절
-            good += 1
-        elif 0x1100 <= code <= 0x11FF or 0x3130 <= code <= 0x318F:  # 자모
-            good += 1
-        elif ch.isascii() and (ch.isprintable() or ch in "\r\n\t"):
+        if (
+            0xAC00 <= code <= 0xD7A3
+            or 0x1100 <= code <= 0x11FF
+            or 0x3130 <= code <= 0x318F
+            or (ch.isascii() and (ch.isprintable() or ch in "\r\n\t"))
+        ):  # 한글 음절
             good += 1
         elif unicodedata.category(ch) in {"Pd", "Pi", "Pf", "Ps", "Pe", "Po", "Zs"}:
             good += 1  # 따옴표, 말줄임표, 전각 문장부호

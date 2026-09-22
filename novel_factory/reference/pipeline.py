@@ -123,7 +123,7 @@ def analyze_document(
             genre=genre,
             source_format=document.source_format,
             split_method=split.method,
-            warnings=warnings + ["본문에서 회차를 하나도 찾지 못했습니다."],
+            warnings=[*warnings, "본문에서 회차를 하나도 찾지 못했습니다."],
         )
         return AnalysisResult(profile=profile, document=document)
 
@@ -193,14 +193,18 @@ def analyze_file(
     """파일 경로 하나로 전체 파이프라인을 돈다."""
     document = parse_file(Path(path))
     return analyze_document(
-        document, reference_id=reference_id, title=title, genre=genre, **kwargs  # type: ignore[arg-type]
+        document,
+        reference_id=reference_id,
+        title=title,
+        genre=genre,
+        **kwargs,  # type: ignore[arg-type]
     )
 
 
 __all__ = [
-    "AnalysisResult",
-    "analyze_file",
-    "analyze_document",
-    "analyze_text",
     "MIN_RELIABLE_EPISODES",
+    "AnalysisResult",
+    "analyze_document",
+    "analyze_file",
+    "analyze_text",
 ]

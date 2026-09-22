@@ -55,7 +55,7 @@ class OpenAICompatProvider(LLMProvider):
         self._owns_client = client is None
 
     @classmethod
-    def from_settings(cls, settings: Settings | None = None) -> "OpenAICompatProvider":
+    def from_settings(cls, settings: Settings | None = None) -> OpenAICompatProvider:
         cfg = settings or get_settings()
         return cls(
             base_url=cfg.llm_base_url,
@@ -82,7 +82,7 @@ class OpenAICompatProvider(LLMProvider):
             self._client.close()
             self._client = None
 
-    def __enter__(self) -> "OpenAICompatProvider":
+    def __enter__(self) -> OpenAICompatProvider:
         return self
 
     def __exit__(self, *exc: object) -> None:

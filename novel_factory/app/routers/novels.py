@@ -1,20 +1,20 @@
 """작품 API (기획안 54번) — Novel Bible과 장기기억 DB 조작.
 
-    POST /novels                              작품 생성
-    GET  /novels                              목록
-    GET  /novels/{slug}                       Novel Bible
-    POST /novels/{slug}/references            참고작 연결 + 참고 강도 (기획안 16번)
-    GET  /novels/{slug}/genre-profile         연결된 참고작 집계
-    POST /novels/{slug}/arcs                  Arc
-    POST /novels/{slug}/characters            인물
-    POST /novels/{slug}/characters/{code}/knowledge   인물 지식 (기획안 23번)
-    POST /novels/{slug}/relationships         관계 변화 (기획안 24번)
-    POST /novels/{slug}/world                 세계관
-    POST /novels/{slug}/timeline              시간선
-    POST /novels/{slug}/foreshadowings        복선
-    GET  /novels/{slug}/foreshadowings/open   미회수 복선 (기획안 47번)
-    PUT  /novels/{slug}/style-bible           Style Bible
-    GET  /novels/{slug}/context/{episode}     Writer Context (기획안 31번)
+POST /novels                              작품 생성
+GET  /novels                              목록
+GET  /novels/{slug}                       Novel Bible
+POST /novels/{slug}/references            참고작 연결 + 참고 강도 (기획안 16번)
+GET  /novels/{slug}/genre-profile         연결된 참고작 집계
+POST /novels/{slug}/arcs                  Arc
+POST /novels/{slug}/characters            인물
+POST /novels/{slug}/characters/{code}/knowledge   인물 지식 (기획안 23번)
+POST /novels/{slug}/relationships         관계 변화 (기획안 24번)
+POST /novels/{slug}/world                 세계관
+POST /novels/{slug}/timeline              시간선
+POST /novels/{slug}/foreshadowings        복선
+GET  /novels/{slug}/foreshadowings/open   미회수 복선 (기획안 47번)
+PUT  /novels/{slug}/style-bible           Style Bible
+GET  /novels/{slug}/context/{episode}     Writer Context (기획안 31번)
 """
 
 from __future__ import annotations
@@ -211,7 +211,9 @@ def create_arc(
 
 
 @router.get("/{slug}/arcs", response_model=list[ArcOut])
-def list_arcs(novel: Novel = Depends(get_novel), db: Session = Depends(get_db)) -> list[Arc]:
+def list_arcs(
+    novel: Novel = Depends(get_novel), db: Session = Depends(get_db)
+) -> list[Arc]:
     return ArcRepository(db).for_novel(novel.id)
 
 
@@ -227,7 +229,9 @@ def create_character(
     repo = CharacterRepository(db)
     code = body.code or repo.next_code(novel.id)
     if repo.get_by_code(novel.id, code) is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"인물 코드 '{code}'는 이미 있습니다.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"인물 코드 '{code}'는 이미 있습니다."
+        )
     payload = body.model_dump(exclude={"code"})
     return repo.add(Character(novel_id=novel.id, code=code, **payload))
 
@@ -385,7 +389,9 @@ def create_foreshadowing(
     repo = ForeshadowingRepository(db)
     code = body.code or repo.next_code(novel.id)
     if repo.get_by_code(novel.id, code) is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"복선 코드 '{code}'는 이미 있습니다.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"복선 코드 '{code}'는 이미 있습니다."
+        )
     return repo.add(
         Foreshadowing(
             novel_id=novel.id,

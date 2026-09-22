@@ -52,6 +52,4 @@ class EchoProvider(LLMProvider):
         self.calls.append(list(messages))
         if self.responses:
             return Completion(text=self.responses.pop(0), model="echo")
-        return Completion(
-            text=messages[-1].content if messages else "", model="echo"
-        )
+        return Completion(text=messages[-1].content if messages else "", model="echo")

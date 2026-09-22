@@ -17,15 +17,15 @@ from novel_factory.reference.structure.splitter import (
 )
 
 __all__ = [
-    "Episode",
-    "SplitResult",
-    "split_document",
-    "split_by_markers",
-    "split_by_length",
-    "assign_sequence",
     "PHASES",
+    "Episode",
     "EpisodeShape",
     "EpisodeTexture",
+    "SplitResult",
     "analyze_episode_shape",
     "analyze_episode_texture",
+    "assign_sequence",
+    "split_by_length",
+    "split_by_markers",
+    "split_document",
 ]

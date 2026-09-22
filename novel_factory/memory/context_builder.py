@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from novel_factory.database.models import Character, Episode, Novel
+from novel_factory.database.models import Character, Novel
 from novel_factory.database.repositories import (
     ArcRepository,
     CharacterRepository,
@@ -117,9 +117,7 @@ class WriterContext:
         if self.relationships:
             lines.append("# 인물 관계 (이번 화 시점)")
             for r in self.relationships:
-                lines.append(
-                    f"- {r.get('source')} → {r.get('target')}: {r.get('state')}"
-                )
+                lines.append(f"- {r.get('source')} → {r.get('target')}: {r.get('state')}")
             lines.append("")
 
         if self.knowledge_limits:

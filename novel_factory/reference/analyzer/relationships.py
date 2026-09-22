@@ -16,6 +16,7 @@ from __future__ import annotations
 import itertools
 import statistics
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from novel_factory.reference.analyzer.characters import CharacterProfile
 from novel_factory.reference.structure.splitter import Episode
@@ -48,7 +49,7 @@ class RelationTrack:
     def transitions(self) -> list[tuple[int, str, str]]:
         """(회차, 이전 상태, 다음 상태) 목록."""
         out: list[tuple[int, str, str]] = []
-        for prev, cur in zip(self.points, self.points[1:]):
+        for prev, cur in pairwise(self.points):
             if prev.state != cur.state:
                 out.append((cur.episode_seq, prev.state, cur.state))
         return out
@@ -59,7 +60,7 @@ class RelationTrack:
         seqs = [seq for seq, _, _ in self.transitions]
         if len(seqs) < 2:
             return 0.0
-        return statistics.fmean(b - a for a, b in zip(seqs, seqs[1:]))
+        return statistics.fmean(b - a for a, b in pairwise(seqs))
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -140,8 +141,7 @@ def analyze_relationships(
         aliases[name] = forms
 
     tracks: dict[tuple[str, str], RelationTrack] = {
-        pair: RelationTrack(pair[0], pair[1])
-        for pair in itertools.combinations(names, 2)
+        pair: RelationTrack(pair[0], pair[1]) for pair in itertools.combinations(names, 2)
     }
 
     for ep in episodes:

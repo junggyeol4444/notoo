@@ -129,9 +129,7 @@ def analyze_style(
     sentence_means = [m.avg_sentence_chars for m in metrics]
     paragraph_means = [m.avg_paragraph_chars for m in metrics]
 
-    pov, first_hits, third_hits = (
-        detect_pov(episodes) if episodes else (POV_UNKNOWN, 0, 0)
-    )
+    pov, first_hits, third_hits = detect_pov(episodes) if episodes else (POV_UNKNOWN, 0, 0)
 
     return StyleProfile(
         avg_sentence_chars=statistics.fmean(sentence_means),

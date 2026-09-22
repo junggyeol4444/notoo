@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 @dataclass(slots=True)
 class Message:
-    role: str      # system / user / assistant
+    role: str  # system / user / assistant
     content: str
 
     def as_dict(self) -> dict[str, str]:
@@ -74,6 +74,4 @@ class LLMProvider(abc.ABC):
         if system:
             messages.append(Message("system", system))
         messages.append(Message("user", prompt))
-        return self.complete(
-            messages, temperature=temperature, max_tokens=max_tokens
-        ).text
+        return self.complete(messages, temperature=temperature, max_tokens=max_tokens).text

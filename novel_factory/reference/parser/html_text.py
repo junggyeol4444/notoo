@@ -10,8 +10,24 @@ from html.parser import HTMLParser
 
 _BLOCK_TAGS = frozenset(
     {
-        "p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6",
-        "blockquote", "section", "article", "header", "footer", "pre", "hr",
+        "p",
+        "div",
+        "br",
+        "li",
+        "tr",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "blockquote",
+        "section",
+        "article",
+        "header",
+        "footer",
+        "pre",
+        "hr",
     }
 )
 _SKIP_TAGS = frozenset({"script", "style", "head", "title", "meta", "link"})
@@ -60,7 +76,12 @@ class _TextExtractor(HTMLParser):
 
 
 def html_to_text(html: str) -> tuple[str, list[str]]:
-    """(본문 텍스트, 발견한 제목 목록)."""
+    """(본문 텍스트, 발견한 제목 목록).
+
+    블록 요소 사이에 빈 줄을 넣는다. <p>를 줄바꿈 하나로만 바꾸면 문단
+    경계가 사라져서, 같은 원고라도 EPUB으로 읽었을 때와 TXT로 읽었을 때
+    평균 문단 길이가 달라진다.
+    """
     extractor = _TextExtractor()
     try:
         extractor.feed(html)
@@ -68,6 +89,5 @@ def html_to_text(html: str) -> tuple[str, list[str]]:
     except Exception:
         # 깨진 XHTML이 섞여 있어도 거기까지 모은 텍스트는 살린다.
         pass
-    text = "".join(extractor.parts)
-    lines = [ln.strip() for ln in text.split("\n")]
-    return "\n".join(ln for ln in lines if ln), extractor.headings
+    lines = [ln.strip() for ln in "".join(extractor.parts).split("\n")]
+    return "\n\n".join(ln for ln in lines if ln), extractor.headings

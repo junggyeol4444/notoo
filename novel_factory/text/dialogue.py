@@ -12,17 +12,16 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from novel_factory.text.tokens import syllables
 
 
-class SegmentKind(str, Enum):
-    DIALOGUE = "dialogue"     # 입 밖으로 낸 말
-    INNER = "inner"           # 속마음
-    NARRATION = "narration"   # 서술
+class SegmentKind(StrEnum):
+    DIALOGUE = "dialogue"  # 입 밖으로 낸 말
+    INNER = "inner"  # 속마음
+    NARRATION = "narration"  # 서술
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,9 +40,9 @@ class Segment:
 # 여는 기호 -> (닫는 기호, 종류)
 _PAIRS: dict[str, tuple[str, SegmentKind]] = {
     '"': ('"', SegmentKind.DIALOGUE),
-    "「": ("」", SegmentKind.DIALOGUE),   # 「」
+    "「": ("」", SegmentKind.DIALOGUE),  # 「」
     "'": ("'", SegmentKind.INNER),
-    "『": ("』", SegmentKind.INNER),      # 『』
+    "『": ("』", SegmentKind.INNER),  # 『』
 }
 
 _BEFORE_OPEN = frozenset(" \t\n([{-—―─")
@@ -108,9 +107,7 @@ def segment_text(text: str) -> list[Segment]:
 
         end = (found + 1) if found != -1 else limit
         if buf_start < i:
-            segments.append(
-                Segment(SegmentKind.NARRATION, text[buf_start:i], buf_start, i)
-            )
+            segments.append(Segment(SegmentKind.NARRATION, text[buf_start:i], buf_start, i))
         segments.append(Segment(kind, text[i:end], i, end))
         buf_start = end
         i = end

@@ -21,14 +21,14 @@ from novel_factory.database.vector import (
 
 __all__ = [
     "Base",
+    "SearchHit",
+    "VectorIndex",
+    "cosine",
     "create_all",
     "drop_all",
     "get_engine",
     "get_session_factory",
+    "get_vector_index",
     "reset_engine",
     "session_scope",
-    "VectorIndex",
-    "SearchHit",
-    "get_vector_index",
-    "cosine",
 ]

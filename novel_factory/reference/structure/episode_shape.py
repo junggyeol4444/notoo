@@ -25,7 +25,7 @@ from novel_factory.text.lexicon import (
     count_hits,
     weighted_hits,
 )
-from novel_factory.text.sentence import split_paragraphs
+from novel_factory.text.sentence import split_paragraphs, split_sentences
 from novel_factory.text.tokens import syllables
 
 PHASES: tuple[str, ...] = ("도입", "전개", "갈등", "보상", "반전", "클리프행어")
@@ -33,26 +33,98 @@ PHASES: tuple[str, ...] = ("도입", "전개", "갈등", "보상", "반전", "�
 # 구간별 고유 표현
 _PHASE_CUES: dict[str, tuple[str, ...]] = {
     "도입": (
-        "아침", "새벽", "저녁", "밤", "다음 날", "이튿날", "그날", "며칠", "주말",
-        "사무실", "회의실", "집으로", "창밖", "거리", "도착했", "들어섰", "눈을 떴",
-        "일어났", "출근", "로비", "엘리베이터",
+        "아침",
+        "새벽",
+        "저녁",
+        "밤",
+        "다음 날",
+        "이튿날",
+        "그날",
+        "며칠",
+        "주말",
+        "사무실",
+        "회의실",
+        "집으로",
+        "창밖",
+        "거리",
+        "도착했",
+        "들어섰",
+        "눈을 떴",
+        "일어났",
+        "출근",
+        "로비",
+        "엘리베이터",
     ),
     "전개": (
-        "설명했", "물었", "대답했", "말했", "이어", "덧붙", "확인했", "검토",
-        "살펴", "정리", "준비", "진행", "논의", "제안",
+        "설명했",
+        "물었",
+        "대답했",
+        "말했",
+        "이어",
+        "덧붙",
+        "확인했",
+        "검토",
+        "살펴",
+        "정리",
+        "준비",
+        "진행",
+        "논의",
+        "제안",
     ),
     "갈등": (
-        "반발", "거부", "맞섰", "쏘아", "노려", "언성", "고함", "따졌", "몰아",
-        "압박", "충돌", "대립", "버텼", "물러서지", "싸늘", "굳었",
+        "반발",
+        "거부",
+        "맞섰",
+        "쏘아",
+        "노려",
+        "언성",
+        "고함",
+        "따졌",
+        "몰아",
+        "압박",
+        "충돌",
+        "대립",
+        "버텼",
+        "물러서지",
+        "싸늘",
+        "굳었",
     ),
     "보상": (
-        "성공", "해냈", "이겼", "체결", "성사", "확보", "획득", "인정", "칭찬",
-        "안도", "웃었", "미소", "박수", "축하", "드디어", "마침내", "끝났다",
+        "성공",
+        "해냈",
+        "이겼",
+        "체결",
+        "성사",
+        "확보",
+        "획득",
+        "인정",
+        "칭찬",
+        "안도",
+        "웃었",
+        "미소",
+        "박수",
+        "축하",
+        "드디어",
+        "마침내",
+        "끝났다",
     ),
     "반전": (
-        "하지만", "그러나", "사실은", "알고 보니", "설마", "뜻밖", "예상과",
-        "믿을 수 없", "말도 안", "뒤집", "착각", "속았", "함정", "이었다니",
-        "였다니", "그런데",
+        "하지만",
+        "그러나",
+        "사실은",
+        "알고 보니",
+        "설마",
+        "뜻밖",
+        "예상과",
+        "믿을 수 없",
+        "말도 안",
+        "뒤집",
+        "착각",
+        "속았",
+        "함정",
+        "이었다니",
+        "였다니",
+        "그런데",
     ),
 }
 
@@ -67,11 +139,11 @@ _POSITION_PRIOR: dict[str, tuple[tuple[float, float], ...]] = {
     "반전": ((0.50, 0.2), (0.85, 0.8), (1.00, 1.0)),
 }
 
-_PRIOR_WEIGHT = 1.2       # 위치 사전확률을 어휘 신호와 얼마나 비슷하게 볼지
+_PRIOR_WEIGHT = 1.2  # 위치 사전확률을 어휘 신호와 얼마나 비슷하게 볼지
 _CUE_WEIGHT = 1.0
 _VALENCE_WEIGHT = 0.8
 _EVENT_WEIGHT = 0.35
-_DIALOGUE_WEIGHT = 0.9    # 대사로만 이루어진 문단은 도입일 수 없다
+_DIALOGUE_WEIGHT = 0.9  # 대사로만 이루어진 문단은 도입일 수 없다
 
 _QUESTION_RE = re.compile(r"[?？]")
 
@@ -118,9 +190,7 @@ def _dialogue_share(text: str) -> float:
     return spoken / total if total else 0.0
 
 
-def _score_paragraph(
-    text: str, position: float, lex: LexiconBundle
-) -> dict[str, float]:
+def _score_paragraph(text: str, position: float, lex: LexiconBundle) -> dict[str, float]:
     pos_hits = count_hits(text, lex.positive)
     neg_hits = count_hits(text, lex.negative)
     event_score, _ = weighted_hits(text, lex.events)
@@ -150,6 +220,24 @@ def _score_paragraph(
     return scores
 
 
+#: 문단이 이보다 적으면 문단 대신 문장을 분석 단위로 쓴다.
+MIN_PARAGRAPHS_FOR_UNITS = 3
+
+
+def _units(text: str) -> list[str]:
+    """구간 배분의 분석 단위.
+
+    보통은 문단이다. 다만 줄바꿈 없이 통으로 쓴 회차가 있어서, 문단이
+    한두 개뿐이면 문장으로 내려간다. 문단이 하나면 그 하나가 통째로
+    클리프행어 구간이 되어 버린다.
+    """
+    paragraphs = split_paragraphs(text)
+    if len(paragraphs) >= MIN_PARAGRAPHS_FOR_UNITS:
+        return paragraphs
+    sentences = split_sentences(text)
+    return sentences if len(sentences) > len(paragraphs) else paragraphs
+
+
 def analyze_episode_shape(
     text: str,
     *,
@@ -158,10 +246,10 @@ def analyze_episode_shape(
 ) -> EpisodeShape:
     """회차 본문에서 구간 비율을 뽑는다."""
     lex = lexicon or DEFAULT_LEXICON
-    paragraphs = split_paragraphs(text)
     total = syllables(text)
+    paragraphs = _units(text)
     if not paragraphs or total == 0:
-        return EpisodeShape({p: 0.0 for p in PHASES}, [], 0)
+        return EpisodeShape(dict.fromkeys(PHASES, 0.0), [], 0)
 
     lengths = [max(syllables(p), 1) for p in paragraphs]
     cumulative = 0
@@ -185,8 +273,12 @@ def analyze_episode_shape(
         if acc >= tail_budget:
             break
 
+    # 회차 전체가 클리프행어가 되는 일은 없어야 한다. 구간 배분이 무의미해진다.
+    if len(paragraphs) > 1:
+        tail_start_idx = max(tail_start_idx, 1)
+
     spans: list[PhaseSpan] = []
-    for i, (para, plen) in enumerate(zip(paragraphs, lengths)):
+    for i, (para, plen) in enumerate(zip(paragraphs, lengths, strict=True)):
         position = cumulative / total_len
         cumulative += plen
         if i >= tail_start_idx:
@@ -196,7 +288,7 @@ def analyze_episode_shape(
         phase = max(scores, key=lambda k: scores[k])
         spans.append(PhaseSpan(phase, para, plen, position))
 
-    ratios = {p: 0.0 for p in PHASES}
+    ratios = dict.fromkeys(PHASES, 0.0)
     for span in spans:
         ratios[span.phase] += span.chars
     for p in ratios:

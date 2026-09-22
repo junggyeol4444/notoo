@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     # --- 저장소 ---------------------------------------------------------
     # SQLite가 기본. PostgreSQL로 바꾸려면
     #   NF_DATABASE_URL=postgresql+psycopg://user:pw@host/db
-    database_url: str = Field(default=f"sqlite:///{REPO_ROOT / 'data' / 'novel_factory.db'}")
+    database_url: str = Field(
+        default=f"sqlite:///{REPO_ROOT / 'data' / 'novel_factory.db'}"
+    )
     # 업로드한 참고소설 원본과 추출 텍스트가 쌓이는 곳
     data_dir: Path = Field(default=REPO_ROOT / "data")
     echo_sql: bool = False

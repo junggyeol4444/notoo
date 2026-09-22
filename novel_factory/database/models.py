@@ -24,7 +24,7 @@ JSON 컬럼을 쓰는 곳이 있다. 분석 결과처럼 스키마가 자주 바
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -45,7 +45,7 @@ from novel_factory.database.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class TimestampMixin:
@@ -75,12 +75,12 @@ class Novel(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200))
     genre: Mapped[str] = mapped_column(String(50), index=True, default="")
     logline: Mapped[str] = mapped_column(Text, default="")
-    premise: Mapped[str] = mapped_column(Text, default="")       # 핵심 소재
-    mood: Mapped[str] = mapped_column(String(200), default="")   # 전체 분위기
+    premise: Mapped[str] = mapped_column(Text, default="")  # 핵심 소재
+    mood: Mapped[str] = mapped_column(String(200), default="")  # 전체 분위기
     pov: Mapped[str] = mapped_column(String(30), default="3인칭 제한")
     target_reader: Mapped[str] = mapped_column(String(200), default="")
     main_conflict: Mapped[str] = mapped_column(Text, default="")
-    ending: Mapped[str] = mapped_column(Text, default="")        # 최종 결말
+    ending: Mapped[str] = mapped_column(Text, default="")  # 최종 결말
 
     planned_episodes: Mapped[int] = mapped_column(Integer, default=0)
     target_chars_per_episode: Mapped[int] = mapped_column(Integer, default=5000)
@@ -90,28 +90,28 @@ class Novel(TimestampMixin, Base):
 
     extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
-    arcs: Mapped[list["Arc"]] = relationship(
+    arcs: Mapped[list[Arc]] = relationship(
         back_populates="novel", cascade="all, delete-orphan", order_by="Arc.order"
     )
-    episodes: Mapped[list["Episode"]] = relationship(
+    episodes: Mapped[list[Episode]] = relationship(
         back_populates="novel", cascade="all, delete-orphan", order_by="Episode.number"
     )
-    characters: Mapped[list["Character"]] = relationship(
+    characters: Mapped[list[Character]] = relationship(
         back_populates="novel", cascade="all, delete-orphan"
     )
-    world_entries: Mapped[list["WorldEntry"]] = relationship(
+    world_entries: Mapped[list[WorldEntry]] = relationship(
         back_populates="novel", cascade="all, delete-orphan"
     )
-    timeline: Mapped[list["TimelineEvent"]] = relationship(
+    timeline: Mapped[list[TimelineEvent]] = relationship(
         back_populates="novel", cascade="all, delete-orphan"
     )
-    foreshadowings: Mapped[list["Foreshadowing"]] = relationship(
+    foreshadowings: Mapped[list[Foreshadowing]] = relationship(
         back_populates="novel", cascade="all, delete-orphan"
     )
-    style_bible: Mapped["StyleBible | None"] = relationship(
+    style_bible: Mapped[StyleBible | None] = relationship(
         back_populates="novel", cascade="all, delete-orphan", uselist=False
     )
-    reference_links: Mapped[list["ReferenceLink"]] = relationship(
+    reference_links: Mapped[list[ReferenceLink]] = relationship(
         back_populates="novel", cascade="all, delete-orphan"
     )
 
@@ -182,15 +182,13 @@ class Character(TimestampMixin, Base):
     """등장인물 (기획안 22번)."""
 
     __tablename__ = "characters"
-    __table_args__ = (
-        UniqueConstraint("novel_id", "code", name="uq_character_code"),
-    )
+    __table_args__ = (UniqueConstraint("novel_id", "code", name="uq_character_code"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     novel_id: Mapped[int] = mapped_column(
         ForeignKey("novels.id", ondelete="CASCADE"), index=True
     )
-    code: Mapped[str] = mapped_column(String(20))       # C001
+    code: Mapped[str] = mapped_column(String(20))  # C001
     name: Mapped[str] = mapped_column(String(100), index=True)
     role: Mapped[str] = mapped_column(String(30), default="조연")
 
@@ -212,7 +210,7 @@ class Character(TimestampMixin, Base):
     exit_reason: Mapped[str] = mapped_column(String(200), default="")
 
     novel: Mapped[Novel] = relationship(back_populates="characters")
-    knowledge: Mapped[list["CharacterKnowledge"]] = relationship(
+    knowledge: Mapped[list[CharacterKnowledge]] = relationship(
         back_populates="character", cascade="all, delete-orphan"
     )
 
@@ -225,9 +223,7 @@ class CharacterKnowledge(TimestampMixin, Base):
     """
 
     __tablename__ = "character_knowledge"
-    __table_args__ = (
-        Index("ix_knowledge_char_fact", "character_id", "fact_key"),
-    )
+    __table_args__ = (Index("ix_knowledge_char_fact", "character_id", "fact_key"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     character_id: Mapped[int] = mapped_column(
@@ -266,7 +262,7 @@ class Relationship(TimestampMixin, Base):
         ForeignKey("characters.id", ondelete="CASCADE"), index=True
     )
     from_episode: Mapped[int] = mapped_column(Integer, default=1)
-    state: Mapped[str] = mapped_column(String(50))     # 경계 / 협력 / 신뢰 / 적대
+    state: Mapped[str] = mapped_column(String(50))  # 경계 / 협력 / 신뢰 / 적대
     intensity: Mapped[float] = mapped_column(Float, default=0.0)  # -1 ~ +1
     note: Mapped[str] = mapped_column(Text, default="")
 
@@ -318,7 +314,7 @@ class TimelineEvent(TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text, default="")
     participants: Mapped[list[str]] = mapped_column(JSON, default=list)
     location: Mapped[str] = mapped_column(String(200), default="")
-    importance: Mapped[int] = mapped_column(Integer, default=1)   # 1~5
+    importance: Mapped[int] = mapped_column(Integer, default=1)  # 1~5
 
     novel: Mapped[Novel] = relationship(back_populates="timeline")
 
@@ -340,7 +336,7 @@ class Foreshadowing(TimestampMixin, Base):
     novel_id: Mapped[int] = mapped_column(
         ForeignKey("novels.id", ondelete="CASCADE"), index=True
     )
-    code: Mapped[str] = mapped_column(String(20))      # F013
+    code: Mapped[str] = mapped_column(String(20))  # F013
     description: Mapped[str] = mapped_column(Text)
     setup_episode: Mapped[int] = mapped_column(Integer)
     planned_payoff: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -415,7 +411,7 @@ class ReferenceNovel(TimestampMixin, Base):
     profile: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
 
-    fingerprints: Mapped[list["ReferenceFingerprint"]] = relationship(
+    fingerprints: Mapped[list[ReferenceFingerprint]] = relationship(
         back_populates="reference", cascade="all, delete-orphan"
     )
 

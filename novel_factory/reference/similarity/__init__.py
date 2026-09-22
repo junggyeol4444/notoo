@@ -13,13 +13,13 @@ from novel_factory.reference.similarity.fingerprint import (
 )
 
 __all__ = [
+    "CONTAINMENT_FAIL",
+    "CONTAINMENT_WARN",
+    "SHINGLE_SIZE",
+    "WHOLE_WORK",
     "FingerprintIndex",
     "SimilarityHit",
     "SimilarityReport",
     "check_text",
     "containment",
-    "SHINGLE_SIZE",
-    "CONTAINMENT_FAIL",
-    "CONTAINMENT_WARN",
-    "WHOLE_WORK",
 ]

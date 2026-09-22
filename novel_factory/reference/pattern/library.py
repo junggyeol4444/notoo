@@ -35,9 +35,9 @@ class ReferencePattern:
     pattern_id: str
     genre: str
     aspect: str
-    instruction: str              # 새 작품 계획에 그대로 넣을 지시문
-    effect: str = ""              # 이 패턴이 노리는 효과
-    placement: str = ""           # 추천 위치
+    instruction: str  # 새 작품 계획에 그대로 넣을 지시문
+    effect: str = ""  # 이 패턴이 노리는 효과
+    placement: str = ""  # 추천 위치
     confidence: float = 0.5
     source: str = PATTERN_SOURCE_DERIVED
     evidence: dict[str, Any] = field(default_factory=dict)
@@ -57,7 +57,15 @@ class ReferencePattern:
 
     def describe(self) -> str:
         """기획안 19번 예시 형태."""
-        lines = [self.pattern_id, "", "장르:", self.genre or "-", "", "패턴:", self.instruction]
+        lines = [
+            self.pattern_id,
+            "",
+            "장르:",
+            self.genre or "-",
+            "",
+            "패턴:",
+            self.instruction,
+        ]
         if self.effect:
             lines += ["", "효과:", self.effect]
         if self.placement:
@@ -140,9 +148,9 @@ def derive_patterns(
 
     if "cliffhanger_rate" in m:
         rate = m["cliffhanger_rate"].weighted_mean
-        top = sorted(
-            genre_profile.cliffhanger_distribution.items(), key=lambda kv: -kv[1]
-        )[:3]
+        top = sorted(genre_profile.cliffhanger_distribution.items(), key=lambda kv: -kv[1])[
+            :3
+        ]
         kinds = ", ".join(f"{k} {v * 100:.0f}%" for k, v in top) or "유형 데이터 없음"
         add(
             "cliffhanger",
@@ -154,9 +162,7 @@ def derive_patterns(
 
     shape = genre_profile.episode_shape
     if shape:
-        parts = ", ".join(
-            f"{k} {v * 100:.0f}%" for k, v in shape.items() if v > 0.01
-        )
+        parts = ", ".join(f"{k} {v * 100:.0f}%" for k, v in shape.items() if v > 0.01)
         add(
             "episode_shape",
             f"한 회차의 구간 배분을 {parts} 근처로 잡는다.",
@@ -229,9 +235,7 @@ class PatternLibrary:
         self, aspect: str, *, genre: str | None = None, min_confidence: float = 0.0
     ) -> list[ReferencePattern]:
         pool = self.for_genre(genre) if genre else self.patterns
-        return [
-            p for p in pool if p.aspect == aspect and p.confidence >= min_confidence
-        ]
+        return [p for p in pool if p.aspect == aspect and p.confidence >= min_confidence]
 
     def select(
         self,

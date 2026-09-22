@@ -17,6 +17,7 @@ from __future__ import annotations
 import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from novel_factory.reference.structure.splitter import Episode
 from novel_factory.text.morph import noun_stems
@@ -81,7 +82,7 @@ class ForeshadowProfile:
     avg_span: float
     median_span: float
     avg_mid_mentions: float
-    setup_position_ratio: float   # 설치 회차가 작품 앞쪽 어디쯤인지 평균 (0~1)
+    setup_position_ratio: float  # 설치 회차가 작품 앞쪽 어디쯤인지 평균 (0~1)
     payoff_position_ratio: float
     density_per_100_episodes: float
 
@@ -142,7 +143,7 @@ def analyze_foreshadowing(
 
         # 복선은 한동안 자취를 감춘다. 언급이 끊긴 최장 구간이 짧으면
         # 작품 내내 계속 나오는 배경 소재지 복선이 아니다.
-        silence = max((b - a for a, b in zip(seqs, seqs[1:])), default=0)
+        silence = max((b - a for a, b in pairwise(seqs)), default=0)
         if silence < MIN_SILENCE_GAP:
             continue
 

@@ -43,11 +43,11 @@ def parse_file(path: Path) -> ParsedDocument:
 
 
 __all__ = [
+    "PARSERS",
+    "SUPPORTED_EXTENSIONS",
     "BaseParser",
     "ParsedDocument",
     "RawChapter",
-    "PARSERS",
-    "SUPPORTED_EXTENSIONS",
     "get_parser",
     "parse_file",
 ]

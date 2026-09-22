@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import re
 import statistics
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from novel_factory.reference.structure.splitter import Episode
 from novel_factory.text.dialogue import Segment, SegmentKind, segment_text
@@ -39,14 +40,31 @@ _VOCATIVE_PARTICLES: frozenset[str] = frozenset({"아", "야"})
 
 # 대사 귀속에 쓰는 발화 동사
 ATTRIBUTION_VERBS: tuple[str, ...] = (
-    "말했", "물었", "대답했", "답했", "중얼", "외쳤", "소리쳤", "속삭", "내뱉",
-    "덧붙", "이었다", "되물었", "읊조", "웃었", "한숨", "입을 열", "말을 이",
+    "말했",
+    "물었",
+    "대답했",
+    "답했",
+    "중얼",
+    "외쳤",
+    "소리쳤",
+    "속삭",
+    "내뱉",
+    "덧붙",
+    "이었다",
+    "되물었",
+    "읊조",
+    "웃었",
+    "한숨",
+    "입을 열",
+    "말을 이",
 )
 
 _HANGUL_ONLY_RE = re.compile(r"^[\uac00-\ud7a3]+$")
 
 # 주격/주제 조사. 인물은 문장의 주어로 자주 온다.
-_SUBJECT_PARTICLES: frozenset[str] = frozenset({"은", "는", "이", "가", "이는", "이가", "께서", "께서는"})
+_SUBJECT_PARTICLES: frozenset[str] = frozenset(
+    {"은", "는", "이", "가", "이는", "이가", "께서", "께서는"}
+)
 
 #: 인명 후보로 인정할 음절 수
 MIN_NAME_LEN = 2
@@ -74,8 +92,8 @@ class _Candidate:
     occurrences: int = 0
     episode_seqs: list[int] = field(default_factory=list)
     particles: Counter[str] = field(default_factory=Counter)
-    person_particle_hits: int = 0     # 씨/님/께서
-    vocative_hits: int = 0            # 아/야 (용언 어미와 겹쳐서 따로 센다)
+    person_particle_hits: int = 0  # 씨/님/께서
+    vocative_hits: int = 0  # 아/야 (용언 어미와 겹쳐서 따로 센다)
     attribution_hits: int = 0
 
     @property
@@ -142,7 +160,7 @@ class CharacterStat:
         seqs = sorted(set(self.episode_seqs))
         if len(seqs) < 2:
             return 0.0
-        return statistics.fmean(b - a for a, b in zip(seqs, seqs[1:]))
+        return statistics.fmean(b - a for a, b in pairwise(seqs))
 
     def exit_style(self, last_story_seq: int) -> str:
         """퇴장 방식 추정 (기획안 9번 '캐릭터 퇴장 방식')."""
@@ -223,7 +241,7 @@ def _strip_particle(eojeol: str) -> tuple[str, str] | None:
     return strip_particle(eojeol, min_len=MIN_NAME_LEN, max_len=MAX_NAME_LEN)
 
 
-def _iter_candidates(text: str) -> "list[tuple[str, str, bool]]":
+def _iter_candidates(text: str) -> list[tuple[str, str, bool]]:
     """(어간, 조사, 발화동사 근접 여부) 목록."""
     out: list[tuple[str, str, bool]] = []
     for m in iter_eojeols(text):
@@ -243,9 +261,7 @@ def _iter_candidates(text: str) -> "list[tuple[str, str, bool]]":
     return out
 
 
-def _attribute_speaker(
-    segments: list[Segment], index: int, names: set[str]
-) -> str | None:
+def _attribute_speaker(segments: list[Segment], index: int, names: set[str]) -> str | None:
     """대사 세그먼트의 화자를 앞뒤 서술에서 찾는다."""
     for offset in (1, -1):
         j = index + offset
@@ -253,7 +269,11 @@ def _attribute_speaker(
             seg = segments[j]
             if seg.kind is not SegmentKind.NARRATION:
                 break
-            window = seg.text[:ATTRIBUTION_WINDOW] if offset == 1 else seg.text[-ATTRIBUTION_WINDOW:]
+            window = (
+                seg.text[:ATTRIBUTION_WINDOW]
+                if offset == 1
+                else seg.text[-ATTRIBUTION_WINDOW:]
+            )
             if not any(v in window for v in ATTRIBUTION_VERBS):
                 break
             for eojeol in (mm.group(0) for mm in iter_eojeols(window)):
@@ -371,7 +391,9 @@ def analyze_characters(
                 st.negative_context += neg
 
     if not kept:
-        return CharacterProfile([], 0, 0, 0, 0.0, {}, [], episodes[-1].seq if episodes else 0)
+        return CharacterProfile(
+            [], 0, 0, 0, 0.0, {}, [], episodes[-1].seq if episodes else 0
+        )
 
     # 점수: 등장 빈도 + 회차 커버리지 + 사람 조사 + 대사량
     max_occ = max(st.occurrences for st in kept.values())
@@ -381,7 +403,8 @@ def analyze_characters(
             2.0 * st.occurrences / max_occ
             + 1.5 * st.episode_coverage / total_eps
             + 0.5 * min(st.person_particle_hits, 10) / 10
-            + 1.0 * (st.dialogue_lines / max(sum(k.dialogue_lines for k in kept.values()), 1))
+            + 1.0
+            * (st.dialogue_lines / max(sum(k.dialogue_lines for k in kept.values()), 1))
         )
 
     ranked = sorted(kept.values(), key=lambda s: -s.score)
@@ -415,15 +438,13 @@ def _assign_roles(ranked: list[CharacterStat], total_eps: int) -> None:
     ranked[0].role = "주인공"
 
     if len(ranked) > 1:
-        neg_rates = [
-            s.negative_context / max(s.occurrences, 1) for s in ranked[1:]
-        ]
+        neg_rates = [s.negative_context / max(s.occurrences, 1) for s in ranked[1:]]
         threshold = (
             statistics.fmean(neg_rates) + statistics.pstdev(neg_rates)
             if len(neg_rates) > 1
             else float("inf")
         )
-        for s, rate in zip(ranked[1:], neg_rates):
+        for s, rate in zip(ranked[1:], neg_rates, strict=True):
             coverage = s.episode_coverage / total_eps
             if rate > threshold and coverage >= 0.15:
                 s.role = "적대자"
