@@ -4,6 +4,7 @@ from novel_factory.reference.similarity.fingerprint import (
     CONTAINMENT_FAIL,
     CONTAINMENT_WARN,
     SHINGLE_SIZE,
+    WHOLE_WORK,
     FingerprintIndex,
     SimilarityHit,
     SimilarityReport,
@@ -20,4 +21,5 @@ __all__ = [
     "SHINGLE_SIZE",
     "CONTAINMENT_FAIL",
     "CONTAINMENT_WARN",
+    "WHOLE_WORK",
 ]

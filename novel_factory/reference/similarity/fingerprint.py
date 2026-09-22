@@ -43,6 +43,18 @@ class FingerprintIndex:
         if hashes:
             self.entries[(reference_id, episode_seq)] = hashes
 
+    def by_reference(self) -> dict[str, set[int]]:
+        """작품 단위로 합친 지문.
+
+        회차 경계를 걸친 사본은 회차별 대조로는 잡히지 않는다. 두 회차에
+        걸친 1,500자를 베끼면 각 회차에 대한 containment는 절반씩으로
+        희석되기 때문이다. 작품 전체와도 대조해야 한다.
+        """
+        merged: dict[str, set[int]] = {}
+        for (ref_id, _seq), hashes in self.entries.items():
+            merged.setdefault(ref_id, set()).update(hashes)
+        return merged
+
     def add_from_metrics(self, reference_id: str, metrics: list) -> int:
         """AnalysisResult.metrics에서 지문을 옮겨 담는다."""
         added = 0
@@ -57,12 +69,20 @@ class FingerprintIndex:
         return len(self.entries)
 
 
+#: 작품 전체와 대조했음을 나타내는 회차 번호
+WHOLE_WORK = -1
+
+
 @dataclass(slots=True)
 class SimilarityHit:
     reference_id: str
-    episode_seq: int
+    episode_seq: int      # WHOLE_WORK이면 작품 전체와의 대조 결과
     jaccard: float
     containment: float
+
+    @property
+    def scope(self) -> str:
+        return "작품전체" if self.episode_seq == WHOLE_WORK else f"{self.episode_seq}화"
 
     @property
     def verdict(self) -> str:
@@ -76,6 +96,7 @@ class SimilarityHit:
         return {
             "reference_id": self.reference_id,
             "episode_seq": self.episode_seq,
+            "scope": self.scope,
             "jaccard": round(self.jaccard, 4),
             "containment": round(self.containment, 4),
             "verdict": self.verdict,
@@ -133,6 +154,20 @@ def check_text(
                 reference_id=ref_id,
                 episode_seq=seq,
                 jaccard=jaccard(candidate, reference),
+                containment=cont,
+            )
+        )
+
+    # 회차 경계를 걸친 사본을 잡기 위해 작품 전체와도 대조한다.
+    for ref_id, whole in index.by_reference().items():
+        cont = containment(candidate, whole)
+        if cont <= 0.0:
+            continue
+        hits.append(
+            SimilarityHit(
+                reference_id=ref_id,
+                episode_seq=WHOLE_WORK,
+                jaccard=jaccard(candidate, whole),
                 containment=cont,
             )
         )

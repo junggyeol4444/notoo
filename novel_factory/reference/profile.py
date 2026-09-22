@@ -50,6 +50,23 @@ class EpisodeShapeSummary:
 
 
 @dataclass(slots=True)
+class StoredAspect:
+    """저장된 Profile JSON에서 집계에 필요한 조각만 꺼내 담는 그릇.
+
+    분석기 결과 객체 전체를 되살릴 필요는 없다. 집계가 보는 것은
+    summary()와 분포 몇 개뿐이다.
+    """
+
+    values: dict[str, Any] = field(default_factory=dict)
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self.values[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+@dataclass(slots=True)
 class ReferenceProfile:
     """참고소설 한 편의 분석 결과 전체."""
 
@@ -75,10 +92,16 @@ class ReferenceProfile:
 
     warnings: list[str] = field(default_factory=list)
 
+    #: DB에 저장된 Profile을 되살릴 때 쓰는 요약.
+    #: 분석기 객체 없이 집계만 하면 되는 경우가 있어서, 그때는 이 값을 쓴다.
+    stored_summary: dict[str, Any] | None = None
+
     # ------------------------------------------------------------------
     # 기획안 14번의 납작한 요약. 다중 참고작 집계와 API 응답에 쓴다.
     # ------------------------------------------------------------------
     def summary(self) -> dict[str, Any]:
+        if self.stored_summary is not None:
+            return dict(self.stored_summary)
         b, p, c, s = self.basic, self.pacing, self.cliffhanger, self.style
         return {
             "reference_id": self.reference_id,
@@ -156,6 +179,48 @@ class ReferenceProfile:
             ensure_ascii=False,
             indent=2,
         )
+
+    @classmethod
+    def from_stored(
+        cls, stored: dict[str, Any], *, reference_id: str, title: str = "", genre: str = ""
+    ) -> "ReferenceProfile":
+        """DB에 저장된 as_dict() 결과에서 집계용 Profile을 복원한다.
+
+        분석기 객체를 되살리지는 않는다. 집계(aggregate_profiles)가 실제로
+        읽는 값만 채운다: summary, episode_shape, 클리프행어/감정 분포, 전개 속도.
+        """
+        cliff = stored.get("cliffhanger") or {}
+        emotion = stored.get("emotion") or {}
+        pacing = stored.get("pacing") or {}
+
+        profile = cls(
+            reference_id=reference_id,
+            title=title or str(stored.get("title") or reference_id),
+            genre=genre or str(stored.get("genre") or ""),
+            source_format=str(stored.get("source_format") or ""),
+            split_method=str(stored.get("split_method") or ""),
+            stored_summary=dict(stored.get("summary") or {}),
+            warnings=list(stored.get("warnings") or []),
+        )
+        profile.episode_shape = EpisodeShapeSummary(
+            ratios=dict(stored.get("episode_shape") or {})
+        )
+        profile.cliffhanger = StoredAspect(  # type: ignore[assignment]
+            {
+                "distribution": dict(cliff.get("distribution") or {}),
+                "rate": float(cliff.get("rate") or 0.0),
+            }
+        )
+        profile.emotion = StoredAspect(  # type: ignore[assignment]
+            {
+                "stage_distribution": dict(emotion.get("stage_distribution") or {}),
+                "volatility": float(emotion.get("volatility") or 0.0),
+            }
+        )
+        profile.pacing = StoredAspect(  # type: ignore[assignment]
+            {"plot_speed": str(pacing.get("plot_speed") or "unknown")}
+        )
+        return profile
 
     def report(self) -> str:
         """기획안 49번 '참고소설 관리 화면'에 띄울 사람용 요약."""
