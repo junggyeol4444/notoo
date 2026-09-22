@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from novel_factory.reference.structure.splitter import Episode
 from novel_factory.text.dialogue import Segment, SegmentKind, segment_text
 from novel_factory.text.lexicon import DEFAULT_LEXICON, LexiconBundle, count_hits
+from novel_factory.text.morph import iter_eojeols, strip_particle
 
 # 한국 성씨. 3음절 후보의 첫 글자가 여기 있으면 인명일 확률이 크게 오른다.
 SURNAMES: frozenset[str] = frozenset(
@@ -31,21 +32,7 @@ SURNAMES: frozenset[str] = frozenset(
     "나민지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용"
 )
 
-# 인명 뒤에 붙는 조사. 긴 것부터 확인해야 "에게"가 "에"로 잘리지 않는다.
-_PARTICLES: tuple[str, ...] = (
-    # 복합 조사를 먼저 둔다. "이번에는"에서 "는"만 떼면 "이번에"가 남아
-    # 후보로 올라온다. "에는"까지 떼야 "이번"이 되어 불용어에 걸린다.
-    "에서부터", "에게서는", "으로서는",
-    "에게서", "한테서", "이라고", "라고는", "에게는", "한테는", "이랑은",
-    "에게도", "에게만", "께서는", "께서도", "에서는", "에서도", "으로는",
-    "으로도", "까지는", "부터는", "만으로", "로서는",
-    "이라는", "이가", "이는", "이를", "이도", "이만", "이와", "이의", "이에",
-    "에는", "에도", "에서", "으로", "로는", "로도", "만은", "만이",
-    "에게", "한테", "께서", "라고", "이랑", "처럼", "보다", "부터", "까지",
-    "은", "는", "이", "가", "을", "를", "의", "와", "과", "도", "만", "랑",
-    "아", "야", "씨", "님", "에", "로",
-)
-# 호격/존칭. 이게 붙으면 사람이다.
+# 인명에만 붙는 조사. 존칭.
 _PERSON_PARTICLES: frozenset[str] = frozenset({"씨", "님", "께서", "께서는", "께서도"})
 # 호격. 용언 어미 -아/-어/-야와 표기가 겹쳐서 따로 다룬다.
 _VOCATIVE_PARTICLES: frozenset[str] = frozenset({"아", "야"})
@@ -56,20 +43,10 @@ ATTRIBUTION_VERBS: tuple[str, ...] = (
     "덧붙", "이었다", "되물었", "읊조", "웃었", "한숨", "입을 열", "말을 이",
 )
 
-_EOJEOL_RE = re.compile(r"[\uac00-\ud7a3]+")
 _HANGUL_ONLY_RE = re.compile(r"^[\uac00-\ud7a3]+$")
 
 # 주격/주제 조사. 인물은 문장의 주어로 자주 온다.
 _SUBJECT_PARTICLES: frozenset[str] = frozenset({"은", "는", "이", "가", "이는", "이가", "께서", "께서는"})
-
-# 이 음절로 끝나는 어절은 서술어다. 인명이 아니다.
-_PREDICATE_ENDINGS: tuple[str, ...] = (
-    "다", "요", "까", "죠", "네", "군", "지", "자", "며", "고", "서", "면",
-    "데", "니", "라", "래", "게", "듯", "봐", "줘", "쳐", "겠", "었", "았",
-)
-# 어간이 이 음절로 끝나면 용언 활용형이다. "결정해"(결정해야), "믿어"(믿어야).
-# 한국 인명이 이 음절로 끝나는 경우는 드물어서 손실보다 이득이 크다.
-_VERB_STEM_ENDINGS: tuple[str, ...] = ("해", "어", "여", "워", "러", "려", "되", "하", "취")
 
 #: 인명 후보로 인정할 음절 수
 MIN_NAME_LEN = 2
@@ -242,29 +219,14 @@ def _count_exit_styles(characters: list[CharacterStat], last_seq: int) -> dict[s
 
 
 def _strip_particle(eojeol: str) -> tuple[str, str] | None:
-    """어절에서 조사를 떼어 (어간, 조사)를 돌려준다.
-
-    조사가 붙지 않은 어절은 후보로 보지 않는다. 그 폴백을 열어 두면
-    "있었다", "않았다" 같은 서술어가 전부 인명 후보로 들어온다.
-    """
-    if eojeol.endswith(_PREDICATE_ENDINGS):
-        return None
-    for particle in _PARTICLES:
-        if len(eojeol) > len(particle) and eojeol.endswith(particle):
-            stem = eojeol[: -len(particle)]
-            if (
-                MIN_NAME_LEN <= len(stem) <= MAX_NAME_LEN
-                and not stem.endswith(_PREDICATE_ENDINGS)
-                and not stem.endswith(_VERB_STEM_ENDINGS)
-            ):
-                return stem, particle
-    return None
+    """인명 길이 범위로 제한한 조사 분리."""
+    return strip_particle(eojeol, min_len=MIN_NAME_LEN, max_len=MAX_NAME_LEN)
 
 
 def _iter_candidates(text: str) -> "list[tuple[str, str, bool]]":
     """(어간, 조사, 발화동사 근접 여부) 목록."""
     out: list[tuple[str, str, bool]] = []
-    for m in _EOJEOL_RE.finditer(text):
+    for m in iter_eojeols(text):
         hit = _strip_particle(m.group(0))
         if hit is None:
             continue
@@ -294,7 +256,7 @@ def _attribute_speaker(
             window = seg.text[:ATTRIBUTION_WINDOW] if offset == 1 else seg.text[-ATTRIBUTION_WINDOW:]
             if not any(v in window for v in ATTRIBUTION_VERBS):
                 break
-            for eojeol in _EOJEOL_RE.findall(window):
+            for eojeol in (mm.group(0) for mm in iter_eojeols(window)):
                 hit = _strip_particle(eojeol)
                 if hit and hit[0] in names:
                     return hit[0]
