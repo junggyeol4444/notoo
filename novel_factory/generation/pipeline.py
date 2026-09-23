@@ -3,15 +3,15 @@
     Episode Planner
     ↓ Reference Pattern Retrieval / Context Retrieval
     ↓ Scene Planning
-    ↓ Draft (장면 단위)
-    ↓ Similarity Check → 문제 장면만 재작성
+    ↓ Draft (장면 단위, 장면마다 Similarity Check → 겹치는 장면만 재작성)
+    ↓ Continuity / Logic / Similarity / Style / Hook 검사
+    ↓ Rewrite (FAIL 장면만, quality_fix_rounds번까지)
+    ↓ (Reader Simulation, 설정에서 켰을 때)
     ↓ Final
     ↓ Memory Update
     ↓ episode_NNN/ 폴더 저장
 
-아직 없는 것 (기획안 55번 Phase 4 이후): Continuity / Logic / Style 검사와
-그에 따른 자동 수정, Reader Simulation. 유사도 검사만 기획안 56번 다섯째 원칙
-("Reference Similarity Checker를 항상 실행한다")에 따라 지금 넣었다.
+검사와 자동 수정은 quality/runner.py에 있다. 기억 갱신은 고친 원고로 한다.
 """
 
 from __future__ import annotations
@@ -49,6 +49,7 @@ from novel_factory.generation.scene_planner import plan_scenes
 from novel_factory.generation.storage import save_episode_files
 from novel_factory.generation.writer import write_episode
 from novel_factory.llm.base import LLMProvider
+from novel_factory.quality.runner import check_and_fix
 from novel_factory.reference.similarity import FingerprintIndex
 
 
@@ -59,6 +60,7 @@ class EpisodeGenerationResult:
     timings: dict[str, float] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     memory: dict[str, object] = field(default_factory=dict)
+    quality: dict[str, object] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, object]:
         ep = self.episode
@@ -74,6 +76,7 @@ class EpisodeGenerationResult:
             "warnings": self.warnings,
             "memory": self.memory,
             "similarity": (ep.quality_reports or {}).get("similarity"),
+            "quality": self.quality,
         }
 
 
@@ -212,6 +215,7 @@ def generate_episode(
     warnings.extend(scenes.warnings)
 
     started = time.perf_counter()
+    index = similarity_index_for(session, novel)
     draft = write_episode(
         session,
         novel,
@@ -219,10 +223,27 @@ def generate_episode(
         provider,
         guidance=guidance,
         settings=cfg,
-        similarity_index=similarity_index_for(session, novel),
+        similarity_index=index,
     )
     timings["write"] = time.perf_counter() - started
     warnings.extend(draft.warnings)
+
+    started = time.perf_counter()
+    quality = check_and_fix(
+        session,
+        novel,
+        planned.episode,
+        provider,
+        settings=cfg,
+        similarity_index=index,
+        guidance=guidance,
+    )
+    timings["quality"] = time.perf_counter() - started
+    warnings.extend(f"품질 검사: {w}" for w in quality.warnings)
+    if quality.report.verdict == "FAIL":
+        warnings.append(
+            "품질 검사: 고친 뒤에도 FAIL이 남았습니다.\n" + quality.report.summary()
+        )
 
     started = time.perf_counter()
     delta = extract_memory(session, novel, planned.episode, provider, settings=cfg)
@@ -240,6 +261,7 @@ def generate_episode(
         timings=timings,
         warnings=warnings,
         memory=applied.as_dict(),
+        quality=quality.as_dict(),
     )
 
 

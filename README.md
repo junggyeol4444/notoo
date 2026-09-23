@@ -12,7 +12,7 @@
 | Phase 1 | 참고소설 분석 (TXT/Markdown/EPUB/DOCX/PDF/**HWP/HWPX** → Reference Profile) | 구현 완료 |
 | Phase 2 | 장기기억 DB (Novel Bible / 인물 / 지식 / 관계 / 세계관 / 시간선 / 복선) | 구현 완료 |
 | Phase 3 | Writer + Reference Pattern 연동 | 구현 완료 (실제 모델로는 미검증 — 아래 참고) |
-| Phase 4~7 | Similarity Checker / 장기 테스트 / EPUB / 출판 | 지문 기반 유사도만 구현 |
+| Phase 4~7 | Similarity Checker / 장기 테스트 / EPUB / 출판 | 품질 검사(Continuity·Logic·Similarity·Style·Hook·Reader)와 자동 수정까지 구현. 장기 테스트·EPUB·출판은 없음 |
 
 Phase 1과 2는 **LLM 없이 전부 동작한다.** 파싱·회차분리·통계·구조분석·DB는
 전부 결정적 로직이다. LLM은 Phase 3 집필부터 필요하다.
@@ -116,9 +116,9 @@ novel_factory/
   database/      15개 테이블, 리포지토리, 벡터 검색
   memory/        Writer Context 조립
   generation/    Phase 3 집필 (사건 일정 · Arc · 회차 계획 · 장면 설계 · Writer · 기억 갱신)
-  quality/       반복 표현 감지 (기획안 33번)
+  quality/       반복 표현 · Continuity · Logic · Style · Hook · Reader 검사, 자동 수정 (기획안 33~38번)
   llm/           로컬 OpenAI 호환 클라이언트
-  app/           FastAPI (37개 엔드포인트)
+  app/           FastAPI (38개 엔드포인트)
   cli.py
 ```
 
@@ -139,7 +139,7 @@ Reference Profile은 원문 문장도 인물 이름도 담지 않는다. 남는 
 ## 개발
 
 ```bash
-pytest                       # 260개 테스트
+pytest                       # 305개 테스트
 ruff check novel_factory     # 린트
 python tests/fixtures/make_fixtures.py    # 한국어 합성 픽스처 재생성
 ```
@@ -155,9 +155,39 @@ plan-story   사건 일정(결정적) → Arc 골격(결정적) → Arc 내용(L
 write N      회차 지시 계산 → 회차 계획(LLM) → 장면 설계(LLM)
              → 장면 단위 집필(LLM, 짧거나 잘리면 이어쓰기)
              → 장면별 참고작 유사도 검사 → FAIL 장면만 재작성
-             → 기억 갱신(LLM 추출 → 코드 검증 → DB 반영)
+             → 품질 검사 Continuity · Logic(LLM) · Similarity · Style · Hook
+             → FAIL 장면만 고쳐 쓰고 재검사 (NF_QUALITY_FIX_ROUNDS, 기본 2번)
+             → (Reader Simulation, NF_QUALITY_READER=true일 때)
+             → 기억 갱신(LLM 추출 → 코드 검증 → DB 반영, 고친 원고 기준)
              → data/novels/<slug>/episode_NNN/ 저장 (기획안 40번 구조)
 ```
+
+## 품질 검사 (기획안 34~38번)
+
+```
+Continuity: PASS      이름·나이·사망 여부·등장 시점·날짜 (규칙 기반)
+Logic: FAIL           동기·우연·갑작스러운 능력·정보 누설·설정 충돌·편리한 해결 (LLM)
+Similarity: PASS      장면별 참고작 지문 대조
+Style: WARN           금지 표현·피할 표현·문장/문단 길이·대사 비율·시점·분량 (규칙 기반)
+Hook: PASS            계획한 클리프행어가 말미에 있는가 (규칙 기반)
+Reader: WARN          페르소나별 점수와 지루한 구간 (LLM, 선택)
+```
+
+FAIL은 자동 수정 대상이고 WARN은 사람이 볼 것이다. 규칙으로 추정한 것(회상일 수
+있는 사망 인물 언급, 유형 판정 등)은 전부 WARN으로 둔다. FAIL이 난 **장면만** 문제
+설명과 함께 다시 쓰고 전체를 재검사한다. 고쳐도 나아지지 않으면(FAIL 수, 같으면 WARN 수가
+줄지 않으면) 원래 판본을 둔다.
+
+LLM 검사의 지적은 인용 구절이 원고에 실제로 있어야 인정한다. 원고에 없는 문장을
+지어내서 지적하면 버리고, 버린 수를 보고서에 남긴다.
+
+```bash
+novel-factory check hoegwi 3             # 검사만 (LLM 없으면 규칙 검사만)
+curl -X POST ".../novels/hoegwi/episodes/3/check?fix=true"   # 확정 전 회차는 수정까지
+```
+
+결과는 DB의 `episodes.quality_reports["quality"]`와 API로 본다. 기획안 40번 폴더
+구조(8개 파일)에는 품질 보고서 파일이 없어서 폴더에는 넣지 않았다.
 
 LLM 출력은 그대로 믿지 않는다. 없는 인물·복선 코드는 지우고, 지시와 다른 클리프행어
 유형은 되돌리고, 이미 있는 인물을 새 인물로 만들지 않는다. 무엇을 고쳤는지는
@@ -176,10 +206,9 @@ LLM 출력은 그대로 믿지 않는다. 없는 인물·복선 코드는 지우
 
 ## 아직 없는 것
 
-- Continuity · Logic · Style Checker와 그에 따른 자동 수정 (기획안 34~36, 38번)
-  (반복 표현 감지(33번)와 유사도 검사(36번)는 있다)
-- Reader Simulation (기획안 37번)
 - 자동 집필 스케줄러 (기획안 42번)
 - 표지 생성 · EPUB 제작 · 출판 어댑터 (기획안 43~46번)
 - 관리자 화면 (기획안 48~50번)
-- 의미 유사도 (현재 유사도 검사는 표현 유사도만 잡는다)
+- 의미 유사도 (현재 유사도 검사는 표현 유사도만 잡는다. 기획안 36번의 장면 진행 순서·
+  고유 설정·캐릭터 조합·사건 해결 방식 유사는 아직 못 본다)
+- 완결 검사 (기획안 47번)

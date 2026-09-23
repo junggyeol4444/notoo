@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -169,3 +171,65 @@ class MemoryDeltaOut(_Lenient):
     _lists = field_validator(
         "advanced_foreshadowings", "resolved_foreshadowings", mode="before"
     )(_as_list)
+
+
+# ---------------------------------------------------------------------------
+# Logic 검사 (기획안 35번)
+# ---------------------------------------------------------------------------
+class LogicIssueOut(_Lenient):
+    kind: str = Field(min_length=1)
+    quote: str = ""  # 원고에서 그대로 옮긴 문제 구절
+    explanation: str = ""
+    severity: str = "low"  # high | low
+
+
+class LogicOut(_Lenient):
+    issues: list[LogicIssueOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Reader Simulation (기획안 37번)
+# ---------------------------------------------------------------------------
+_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _score(value: object) -> object:
+    """'7점', '7/10', 7.5 같은 답을 0~10 사이 숫자로."""
+    if isinstance(value, str):
+        m = _NUMBER_RE.search(value)
+        if not m:
+            return value  # 검증 오류로 넘겨 재요청하게 한다
+        value = float(m.group())
+    if isinstance(value, int | float):
+        return min(max(float(value), 0.0), 10.0)
+    return value
+
+
+class ReaderScores(_Lenient):
+    immersion: float = 0.0  # 몰입도
+    pacing: float = 0.0  # 전개속도
+    character_appeal: float = 0.0  # 캐릭터 매력
+    conflict: float = 0.0  # 갈등
+    reward: float = 0.0  # 보상
+    cliffhanger: float = 0.0  # 클리프행어
+
+    _scores = field_validator(
+        "immersion",
+        "pacing",
+        "character_appeal",
+        "conflict",
+        "reward",
+        "cliffhanger",
+        mode="before",
+    )(_score)
+
+
+class BoringPart(_Lenient):
+    quote: str = ""
+    reason: str = ""
+
+
+class ReaderOut(_Lenient):
+    scores: ReaderScores
+    boring_parts: list[BoringPart] = Field(default_factory=list)  # 지루한 구간
+    comment: str = ""

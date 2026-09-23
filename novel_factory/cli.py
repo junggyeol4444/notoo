@@ -6,9 +6,10 @@
     novel-factory aggregate a.txt b.txt c.txt     여러 작품 집계 + 패턴 도출
     novel-factory plan-story hoegwi               사건 일정 + Arc 설계
     novel-factory write hoegwi 1 --to 30          1~30화 연속 생성 (LLM 필요)
+    novel-factory check hoegwi 3                  3화 품질 검사 (LLM 없으면 규칙 검사만)
     novel-factory serve                           API 서버 실행
 
-write 말고는 LLM 없이 동작한다.
+write 말고는 LLM 없이 동작한다. check는 LLM이 있으면 Logic 검사까지 한다.
 """
 
 from __future__ import annotations
@@ -144,8 +145,50 @@ def _cmd_write(args: argparse.Namespace) -> int:
                 f"{number}화 '{info['title']}' {info['char_count']:,}자 "
                 f"훅={info['hook_type'] or '없음'} → {info['folder']}"
             )
+            quality = result.quality
+            summary = str(quality.get("summary", "")).replace("\n", ", ")
+            print(f"   품질: {quality.get('verdict')} ({summary})")
             for warning in result.warnings:
                 print(f"   [경고] {warning}")
+    return 0
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    """검사만 한다. 원고를 고치는 것은 write(생성 중 자동 수정)나 API의 fix=true."""
+    from novel_factory.database import create_all, session_scope
+    from novel_factory.database.repositories import EpisodeRepository
+    from novel_factory.generation.pipeline import similarity_index_for
+    from novel_factory.llm import get_provider
+    from novel_factory.quality.runner import check_and_fix
+
+    create_all()
+    provider = get_provider()
+    with session_scope() as session:
+        novel = _open_novel(session, args.slug)
+        episode = EpisodeRepository(session).get_by_number(novel.id, args.episode)
+        if episode is None or not (episode.final_text or "").strip():
+            print(f"{args.episode}화 원고가 없습니다.", file=sys.stderr)
+            return 1
+        outcome = check_and_fix(
+            session,
+            novel,
+            episode,
+            provider if provider.available else None,
+            similarity_index=similarity_index_for(session, novel),
+            fix=False,
+            reader=args.reader or None,
+        )
+        print(outcome.report.summary())
+        for issue in outcome.report.issues:
+            scene = f" 장면{issue.scene_index + 1}" if issue.scene_index is not None else ""
+            print(
+                f"  [{issue.severity}] {issue.checker}/{issue.code}{scene}: {issue.message}"
+            )
+            if issue.quote:
+                print(f'      "{issue.quote}"')
+        for name, result in outcome.report.results.items():
+            if result.skipped:
+                print(f"  ({name} 건너뜀: {result.skipped})")
     return 0
 
 
@@ -209,6 +252,14 @@ def build_parser() -> argparse.ArgumentParser:
     write.add_argument("--to", type=int, default=0, help="이 회차까지 연속 생성")
     write.add_argument("--replace", action="store_true", help="확정된 회차를 다시 만든다")
     write.set_defaults(func=_cmd_write)
+
+    check = sub.add_parser("check", help="회차 품질 검사 (검사만, 원고는 고치지 않는다)")
+    check.add_argument("slug")
+    check.add_argument("episode", type=int)
+    check.add_argument(
+        "--reader", action="store_true", help="Reader Simulation도 돌린다 (LLM 필요)"
+    )
+    check.set_defaults(func=_cmd_check)
 
     serve = sub.add_parser("serve", help="API 서버를 띄운다")
     serve.add_argument("--host", default="127.0.0.1")

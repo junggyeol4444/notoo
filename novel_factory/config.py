@@ -76,6 +76,25 @@ class Settings(BaseSettings):
     # 유사도 검사에 걸린 장면을 다시 쓰는 최대 횟수 (기획안 20·38번)
     similarity_rewrite_attempts: int = 2
 
+    # --- 품질 검사 (기획안 34~38번) ------------------------------------------
+    # FAIL 장면을 고쳐 쓰고 다시 검사하는 최대 횟수. 0이면 검사만 한다.
+    quality_fix_rounds: int = 2
+    # Logic 검사(LLM)를 집필 파이프라인에서 돌릴지
+    quality_logic: bool = True
+    # Reader Simulation(LLM). 페르소나마다 원고 전체를 한 번씩 읽히므로
+    # 로컬 모델에서는 시간이 많이 든다. 기본은 끈다.
+    quality_reader: bool = False
+    # Reader Simulation 페르소나. 환경변수로는 JSON 목록으로 준다.
+    #   NF_QUALITY_READER_PERSONAS='["웹소설 독자", "까다로운 독자"]'
+    quality_reader_personas: list[str] = Field(
+        default_factory=lambda: [
+            "웹소설 독자",
+            "판타지 독자",
+            "로맨스 독자",
+            "까다로운 독자",
+        ]
+    )
+
     # --- 분석 파라미터 ----------------------------------------------------
     # 회차 구분 마커를 못 찾았을 때 강제 분할할 기준 글자 수
     fallback_episode_chars: int = 5000

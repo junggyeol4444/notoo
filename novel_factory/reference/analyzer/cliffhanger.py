@@ -48,6 +48,13 @@ class CliffhangerVerdict:
     score: float
     runner_up: str | None
     signals: list[str] = field(default_factory=list)
+    # 1위 유형의 점수 중 어휘 근거에서 온 몫. 0이면 구조 신호뿐이다.
+    lexical_score: float = 0.0
+
+    @property
+    def grounded(self) -> bool:
+        """훅이라고 볼 근거가 있는가: 어휘 근거가 있거나 구조 신호가 둘 이상."""
+        return self.lexical_score > 0.0 or len(self.signals) >= 2
 
     @property
     def has_cliffhanger(self) -> bool:
@@ -142,10 +149,15 @@ def classify_cliffhanger(
 
     # 구조 신호만으로 클리프행어라고 하지 않는다. 짧은 마지막 문단은
     # 그 자체로는 훅이 아니다. 어휘 근거가 있거나 구조 신호가 둘 이상이어야 한다.
-    grounded = lexical.get(top_kind, 0.0) > 0.0 or len(signals) >= 2
+    top_lexical = lexical.get(top_kind, 0.0)
+    grounded = top_lexical > 0.0 or len(signals) >= 2
     if top_score < CLIFFHANGER_THRESHOLD or not grounded:
-        return CliffhangerVerdict(episode_seq, NO_CLIFFHANGER, top_score, None, signals)
-    return CliffhangerVerdict(episode_seq, top_kind, top_score, runner_up, signals)
+        return CliffhangerVerdict(
+            episode_seq, NO_CLIFFHANGER, top_score, None, signals, top_lexical
+        )
+    return CliffhangerVerdict(
+        episode_seq, top_kind, top_score, runner_up, signals, top_lexical
+    )
 
 
 def analyze_cliffhangers(

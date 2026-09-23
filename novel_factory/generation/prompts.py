@@ -349,3 +349,151 @@ def build_memory_prompt(
 
 # 출력 형식 (이 모양 그대로)
 {_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# Logic 검사 (기획안 35번)
+# ---------------------------------------------------------------------------
+LOGIC_SYSTEM = """\
+당신은 연재 소설의 편집자다. 회차 원고를 읽고 논리 문제만 찾는다.
+문장이 좋은지, 재미있는지는 평가하지 않는다.
+
+# 규칙
+- 원고에 실제로 있는 문제만 적는다. 문제가 없으면 issues를 빈 목록으로 둔다.
+- quote에는 문제가 드러나는 원고 구절을 한 글자도 바꾸지 말고 그대로 옮긴다.
+  한 문장이면 충분하다. 원고에 없는 문장을 quote로 쓰면 그 지적은 버려진다.
+- severity는 독자가 바로 알아챌 만큼 분명한 문제면 high, 애매하면 low.
+- '작품 기준'과 '정보 제한', 시간선에 적힌 사실을 근거로 판단한다.
+
+설명 없이 JSON 하나만 출력한다."""
+
+
+def build_logic_prompt(
+    context_block: str,
+    *,
+    episode_number: int,
+    episode_plan: dict[str, object],
+    text: str,
+    kinds: dict[str, str],
+) -> str:
+    example = {
+        "issues": [
+            {
+                "kind": next(iter(kinds)),
+                "quote": "원고에서 그대로 옮긴 문장",
+                "explanation": "왜 문제인지 한두 문장",
+                "severity": "high",
+            }
+        ]
+    }
+    kind_lines = "\n".join(f"- {k}: {v}" for k, v in kinds.items())
+    return f"""{context_block}
+
+# 이번 화 계획
+{_json(episode_plan)}
+
+# {episode_number}화 원고
+{text}
+
+# 찾을 문제 (kind)
+{kind_lines}
+
+# 출력 형식 (이 모양 그대로)
+{_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# Reader Simulation (기획안 37번)
+# ---------------------------------------------------------------------------
+READER_SYSTEM = """\
+당신은 연재 웹소설을 읽는 독자다. 주어진 독자 성향대로 방금 읽은 회차를 평가한다.
+고칠 방법을 제안하지 말고, 읽으면서 느낀 대로 점수를 매긴다.
+
+# 규칙
+- 점수는 0~10 사이 숫자다.
+- boring_parts의 quote에는 지루했던 구간의 원고 문장을 그대로 옮긴다. 없으면 빈 목록.
+
+설명 없이 JSON 하나만 출력한다."""
+
+READER_PERSONAS: dict[str, str] = {
+    "웹소설 독자": "모바일로 매일 연재를 따라 읽는다. 전개가 늘어지면 바로 이탈한다.",
+    "판타지 독자": "능력 체계와 세계관의 일관성, 성장과 보상의 쾌감을 중시한다.",
+    "로맨스 독자": "인물 사이의 감정선과 관계 변화, 설렘을 중시한다.",
+    "까다로운 독자": "개연성과 문장, 클리셰에 민감하다. 쉽게 높은 점수를 주지 않는다.",
+}
+
+
+def build_reader_prompt(persona: str, *, episode_number: int, genre: str, text: str) -> str:
+    example = {
+        "scores": {
+            "immersion": 7,
+            "pacing": 6,
+            "character_appeal": 7,
+            "conflict": 5,
+            "reward": 6,
+            "cliffhanger": 8,
+        },
+        "boring_parts": [{"quote": "지루했던 원고 문장", "reason": "이유"}],
+        "comment": "한두 문장 감상",
+    }
+    description = READER_PERSONAS.get(persona, "")
+    return f"""# 당신은
+{persona}{f": {description}" if description else ""}
+
+# 작품 장르
+{genre or "미정"}
+
+# {episode_number}화 원고
+{text}
+
+# 점수 항목
+- immersion: 몰입도
+- pacing: 전개속도 (늘어지지 않는가)
+- character_appeal: 캐릭터 매력
+- conflict: 갈등
+- reward: 보상 (읽은 보람, 사이다)
+- cliffhanger: 다음 화를 보고 싶은가
+
+# 출력 형식 (이 모양 그대로)
+{_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# 자동 수정 (기획안 38번)
+# ---------------------------------------------------------------------------
+def build_fix_prompt(
+    context_block: str,
+    episode_plan: dict[str, object],
+    scene: dict[str, object],
+    *,
+    scene_index: int,
+    scene_count: int,
+    target_chars: int,
+    scene_text: str,
+    problems: list[str],
+    previous_tail: str,
+    next_head: str,
+    hook: dict[str, object] | None,
+) -> str:
+    parts = [
+        "# 장면 고치기\n"
+        "아래 장면에서 검사에 걸린 문제를 고쳐 장면 전체를 다시 쓴다.\n"
+        "문제가 된 부분만 고치고, 장면의 사건과 목적, 등장인물은 그대로 둔다.",
+        context_block,
+        f"# 이번 화 계획\n{_json(episode_plan)}",
+        f"# 고칠 장면 ({scene_index + 1}/{scene_count})\n{_json(scene)}",
+        f"# 검사에 걸린 문제\n{_bullets(problems)}",
+        f"# 분량\n- 공백 제외 약 {target_chars:,}자로 쓴다.",
+    ]
+    if hook and scene_index == scene_count - 1:
+        parts.append(
+            "# 마무리\n"
+            f"이 장면이 회차의 끝이다. '{hook.get('type')}' 유형으로 끊는다: {hook.get('content')}"
+        )
+    if previous_tail:
+        parts.append(f"# 바로 앞 원고 (이어지게 쓴다. 반복하지 말 것)\n{previous_tail}")
+    if next_head:
+        parts.append(f"# 바로 뒤 원고 (여기로 자연스럽게 넘어가게 쓴다)\n{next_head}")
+    parts.append(f"# 원래 장면\n{scene_text}")
+    parts.append("고친 장면 본문만 출력한다.")
+    return "\n\n".join(parts)

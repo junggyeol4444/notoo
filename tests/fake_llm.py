@@ -7,6 +7,12 @@
 실제 로컬 모델의 버릇도 흉내 낸다.
   - 구조화 응답에 <think> 블록과 코드펜스를 붙인다
   - messy=True면 단계마다 첫 응답을 규격에 안 맞게 내서 재시도를 타게 한다
+  - Logic·Reader 검사에서 원고에 없는 문장을 인용하고, 없는 kind를 섞는다
+
+품질 검사 시험용
+  plant      첫 장면 초고 끝에 이 문장을 한 번 넣는다 (금지 표현, 논리 문제 등)
+  logic_flag 원고에 이 문장이 있으면 Logic 검사가 high로 지적한다
+  fix_text   장면 고치기 요청에 늘 이 글을 준다 (고친 판본이 더 나쁜 경우 시험용)
 """
 
 from __future__ import annotations
@@ -18,7 +24,9 @@ from collections import Counter
 from novel_factory.generation.prompts import (
     ARC_SYSTEM,
     EPISODE_SYSTEM,
+    LOGIC_SYSTEM,
     MEMORY_SYSTEM,
+    READER_SYSTEM,
     SCENE_SYSTEM,
     WRITER_SYSTEM,
 )
@@ -48,6 +56,8 @@ def _stage(messages: list[Message]) -> str:
         ("scene", SCENE_SYSTEM),
         ("writer", WRITER_SYSTEM),
         ("memory", MEMORY_SYSTEM),
+        ("logic", LOGIC_SYSTEM),
+        ("reader", READER_SYSTEM),
     ):
         if system == prompt:
             return name
@@ -83,8 +93,14 @@ class ScriptedNovelist(LLMProvider):
         messy: bool = False,
         short_first: bool = False,
         copy_text: str | None = None,
+        plant: str | None = None,
+        logic_flag: str | None = None,
+        fix_text: str | None = None,
     ) -> None:
         self.messy = messy
+        self.plant = plant
+        self.logic_flag = logic_flag
+        self.fix_text = fix_text
         self.short_first = short_first
         self.copy_text = copy_text  # 집필 첫 응답을 이 글로 (유사도 재작성 시험용)
         self.calls: list[tuple[str, list[Message], dict[str, object]]] = []
@@ -201,13 +217,20 @@ class ScriptedNovelist(LLMProvider):
         target = int(
             re.search(r"공백 제외 약 ([\d,]+)자로", user).group(1).replace(",", "")
         )  # type: ignore[union-attr]
+        if user.startswith("# 장면 고치기"):
+            if self.fix_text is not None:
+                return self.fix_text
+            return "## 고친 장면\n\n" + _prose(target, self._seed + 7)
         if self.copy_text is not None:
             copied, self.copy_text = self.copy_text, None
             return copied
         if self.short_first:
             self.short_first = False
             return "## 장면\n\n" + _prose(target // 3, self._seed)
-        return "## 장면\n\n" + _prose(target, self._seed)
+        body = _prose(target, self._seed)
+        if self.plant is not None:
+            body, self.plant = f"{body}\n\n{self.plant}", None
+        return "## 장면\n\n" + body
 
     def _memory(self, user: str, messages: list[Message], is_retry: bool) -> str:
         codes = re.findall(r'"code":\s*"(C\d{3})"', user)
@@ -266,6 +289,57 @@ class ScriptedNovelist(LLMProvider):
             "hook_type": hook.group(1) if hook else "",
         }
         return _wrap(delta)
+
+    def _logic(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        if self._messy_first(is_retry):
+            return "문제가 몇 가지 보입니다."
+        manuscript = user.split("화 원고\n", 1)[1].split("\n\n# 찾을 문제", 1)[0]
+        issues: list[dict[str, object]] = [
+            {
+                "kind": "coincidence",
+                "quote": "원고 어디에도 없는 지어낸 문장이다.",
+                "explanation": "우연",
+                "severity": "high",
+            },
+            {
+                "kind": "문체",  # 정해 둔 종류가 아니다
+                "quote": manuscript.split("\n")[0],
+                "explanation": "문장이 밋밋하다",
+                "severity": "low",
+            },
+        ]
+        if self.logic_flag and self.logic_flag in manuscript:
+            issues.append(
+                {
+                    "kind": "knowledge_leak",
+                    "quote": f"“{self.logic_flag}”",  # 둥근 따옴표로 감싸 옴
+                    "explanation": "서연은 아직 이 사실을 모른다.",
+                    "severity": "high",
+                }
+            )
+        return _wrap({"issues": issues})
+
+    def _reader(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        persona = user.split("\n")[1].split(":")[0]
+        manuscript = user.split("화 원고\n", 1)[1].split("\n\n# 점수 항목", 1)[0]
+        first = manuscript.split("\n")[0]
+        return _wrap(
+            {
+                "scores": {
+                    "immersion": "7점",
+                    "pacing": "6/10",
+                    "character_appeal": 8,
+                    "conflict": 5.5,
+                    "reward": 12,  # 범위 밖 → 10으로
+                    "cliffhanger": 7,
+                },
+                "boring_parts": [
+                    {"quote": first, "reason": f"{persona}에게는 도입이 늘어진다"},
+                    {"quote": "없는 문장을 지루하다고 한다.", "reason": "지어냄"},
+                ],
+                "comment": "무난하다",
+            }
+        )
 
     def _unknown(self, user: str, messages: list[Message], is_retry: bool) -> str:
         return "무슨 요청인지 모르겠습니다."

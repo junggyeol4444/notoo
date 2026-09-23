@@ -1,12 +1,13 @@
-"""집필 API (기획안 28~31, 39번 — Phase 3).
+"""집필 API (기획안 28~31, 34~39번).
 
     GET  /novels/{slug}/guidance                    참고작에서 온 목표값과 사건 일정
     POST /novels/{slug}/story/plan                  사건 일정 + Arc 설계
     POST /novels/{slug}/episodes/{n}/plan           회차 계획
     POST /novels/{slug}/episodes/{n}/scenes         장면 설계
     POST /novels/{slug}/episodes/{n}/write          장면 단위 집필
+    POST /novels/{slug}/episodes/{n}/check          품질 검사 (fix=true면 FAIL 장면 수정)
     POST /novels/{slug}/episodes/{n}/memory         기억 갱신
-    POST /novels/{slug}/episodes/{n}/generate       위 네 단계를 한 번에
+    POST /novels/{slug}/episodes/{n}/generate       위 단계를 한 번에
     GET  /novels/{slug}/episodes                    회차 목록
     GET  /novels/{slug}/episodes/{n}                회차 상세
 
@@ -37,6 +38,7 @@ from novel_factory.generation.scene_planner import plan_scenes
 from novel_factory.generation.storage import save_episode_files
 from novel_factory.generation.writer import write_episode
 from novel_factory.llm.base import LLMProvider
+from novel_factory.quality.runner import check_and_fix
 
 router = APIRouter(prefix="/novels", tags=["writing"])
 
@@ -150,6 +152,45 @@ def episode_write(
         "similarity": result.similarity,
         "warnings": result.warnings,
     }
+
+
+@router.post("/{slug}/episodes/{number}/check")
+def episode_check(
+    number: int,
+    fix: bool = False,
+    logic: bool | None = None,
+    reader: bool | None = None,
+    novel: Novel = Depends(get_novel),
+    db: Session = Depends(get_db),
+    llm: LLMProvider = Depends(get_llm),
+) -> dict[str, object]:
+    """품질 검사 (기획안 34~38번).
+
+    LLM이 없으면 규칙 기반 검사(Continuity, Similarity, Style, Hook)만 하고
+    Logic·Reader는 SKIPPED로 남긴다. logic/reader를 비우면 설정값을 따른다.
+    확정된 회차는 기억 갱신이 이미 끝났으므로 검사만 한다. 고치려면 다시 생성한다.
+    """
+    episode = _episode_or_404(db, novel, number)
+    if not (episode.final_text or "").strip():
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{number}화에 원고가 없습니다.")
+    if fix and episode.status == "final":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"{number}화는 확정돼 기억 갱신까지 끝났습니다. 원고를 고치면 장기기억과 "
+            "어긋나므로 검사만 합니다. 고치려면 generate?replace=true로 다시 만드세요.",
+        )
+    provider = _require_llm(llm) if fix else (llm if llm.available else None)
+    outcome = check_and_fix(
+        db,
+        novel,
+        episode,
+        provider,
+        similarity_index=similarity_index_for(db, novel),
+        fix=fix,
+        logic=logic,
+        reader=reader,
+    )
+    return {"number": number, "char_count": episode.char_count, **outcome.as_dict()}
 
 
 @router.post("/{slug}/episodes/{number}/memory")

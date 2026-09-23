@@ -61,6 +61,11 @@ def clean_prose(text: str) -> str:
     return normalize_text("\n".join(lines))
 
 
+def assemble_text(scene_texts: list[str]) -> str:
+    """장면 원문들을 회차 본문으로 잇는다. 장면 사이는 빈 줄 하나."""
+    return normalize_text("\n\n".join(t for t in scene_texts if t and t.strip()))
+
+
 @dataclass(slots=True)
 class SceneDraft:
     index: int
@@ -100,7 +105,7 @@ class DraftResult:
         return syllables(self.text)
 
 
-def _write_once(
+def write_scene(
     provider: LLMProvider,
     messages: list[Message],
     target_chars: int,
@@ -204,7 +209,7 @@ def write_episode(
             dialogue_ratio=guide.dialogue_ratio,
         )
         messages = [Message("system", WRITER_SYSTEM), Message("user", prompt)]
-        text, continuations, warnings = _write_once(provider, messages, target, cfg)
+        text, continuations, warnings = write_scene(provider, messages, target, cfg)
         draft = SceneDraft(i, text, target, continuations=continuations, warnings=warnings)
 
         if index.entries and text:
@@ -213,7 +218,7 @@ def write_episode(
         drafts.append(draft)
         body = f"{body}\n\n{draft.text}" if body else draft.text
 
-    text = normalize_text(body)
+    text = assemble_text([d.text for d in drafts])
     report = (
         check_text(text, index).as_dict()
         if index.entries
@@ -228,8 +233,10 @@ def write_episode(
     episode.final_text = text
     episode.char_count = syllables(text)
     episode.status = "drafted"
+    # 장면 원문도 남긴다. 품질 검사에서 문제가 난 장면만 다시 쓰려면
+    # 회차 본문을 장면 단위로 다시 나눌 수 있어야 한다 (기획안 38번).
     episode.scenes = [
-        {**scene, "draft": draft.as_dict()}
+        {**scene, "draft": draft.as_dict(), "text": draft.text}
         for scene, draft in zip(scenes, drafts, strict=True)
     ]
     # JSON 컬럼은 안쪽 값이 바뀐 것을 스스로 알아채지 못한다.
