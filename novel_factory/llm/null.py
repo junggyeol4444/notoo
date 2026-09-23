@@ -25,6 +25,7 @@ class NullProvider(LLMProvider):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        json_mode: bool = False,
     ) -> Completion:
         raise LLMNotConfiguredError(
             "LLM이 설정되지 않았습니다. NF_LLM_BASE_URL과 NF_LLM_MODEL을 지정하세요. "
@@ -48,6 +49,7 @@ class EchoProvider(LLMProvider):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        json_mode: bool = False,
     ) -> Completion:
         self.calls.append(list(messages))
         if self.responses:

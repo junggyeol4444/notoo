@@ -52,6 +52,29 @@ class Settings(BaseSettings):
     llm_timeout_sec: float = 300.0
     llm_max_retries: int = 2
     llm_temperature: float = 0.8
+    # 계획·추출처럼 정해진 형식이 필요한 호출은 온도를 낮춘다.
+    llm_structured_temperature: float = 0.3
+    # 모델의 컨텍스트 길이(토큰). Writer에 넘길 설정·요약 분량을 이 안에 맞춘다.
+    llm_context_tokens: int = 65536
+    # 한국어 1글자당 토큰 수 추정치. 토크나이저마다 다르므로 쓰는 모델에 맞춰
+    # 조정한다. 컨텍스트 예산과 max_tokens 계산에만 쓰인다.
+    llm_tokens_per_char: float = 1.0
+    # 서버가 OpenAI의 response_format={"type": "json_object"}를 지원하면 켠다.
+    # 지원하지 않는 서버에 보내면 400이 나므로 기본은 끈다.
+    llm_json_mode: bool = False
+    # 구조화 응답이 형식에 맞지 않을 때 오류를 알려 주며 다시 요청하는 횟수
+    llm_structured_retries: int = 2
+
+    # --- 집필 ------------------------------------------------------------
+    # 장면 하나의 목표 글자 수 범위. 회차 목표 분량을 이 범위로 나눠 장면 수를 정한다.
+    scene_min_chars: int = 700
+    scene_max_chars: int = 1600
+    # 다음 장면을 쓸 때 이어 붙여 보여 줄 직전 원고 분량(글자)
+    writer_tail_chars: int = 1500
+    # 장면이 목표의 이 비율보다 짧으면 이어 쓰게 한다
+    writer_min_length_ratio: float = 0.7
+    # 유사도 검사에 걸린 장면을 다시 쓰는 최대 횟수 (기획안 20·38번)
+    similarity_rewrite_attempts: int = 2
 
     # --- 분석 파라미터 ----------------------------------------------------
     # 회차 구분 마커를 못 찾았을 때 강제 분할할 기준 글자 수
@@ -69,8 +92,13 @@ class Settings(BaseSettings):
     def extracted_dir(self) -> Path:
         return self.data_dir / "extracted"
 
+    @property
+    def novels_dir(self) -> Path:
+        """회차 산출물 저장 위치 (기획안 40번 episode_NNN/ 폴더들)."""
+        return self.data_dir / "novels"
+
     def ensure_dirs(self) -> None:
-        for d in (self.data_dir, self.uploads_dir, self.extracted_dir):
+        for d in (self.data_dir, self.uploads_dir, self.extracted_dir, self.novels_dir):
             d.mkdir(parents=True, exist_ok=True)
 
     @property

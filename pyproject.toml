@@ -65,6 +65,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
+# 프롬프트 템플릿의 한국어 문장은 줄을 나누면 오히려 읽기 어렵다
+"novel_factory/generation/prompts.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -58,8 +58,13 @@ class LLMProvider(abc.ABC):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        json_mode: bool = False,
     ) -> Completion:
-        """대화를 주고 이어질 텍스트를 받는다."""
+        """대화를 주고 이어질 텍스트를 받는다.
+
+        json_mode=True는 서버에 JSON만 내라고 요청한다. 지원하지 않는 서버도
+        있으므로 이 값에 기대지 말고, 응답은 항상 generation.structured로 검증한다.
+        """
 
     def ask(
         self,

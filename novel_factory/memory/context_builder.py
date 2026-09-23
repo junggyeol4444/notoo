@@ -293,6 +293,7 @@ def build_context(
             "occurred_at": t.occurred_at,
             "title": t.title,
             "episode_number": t.episode_number,
+            "importance": t.importance,
         }
         for t in TimelineRepository(session).up_to_episode(novel.id, episode_number)
     ]

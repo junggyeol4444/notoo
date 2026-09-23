@@ -12,6 +12,7 @@ from novel_factory.database.base import get_session_factory
 from novel_factory.database.models import Novel
 from novel_factory.database.repositories import NovelRepository
 from novel_factory.errors import NotFoundError
+from novel_factory.llm import LLMProvider, get_provider
 
 
 def get_db() -> Iterator[Session]:
@@ -40,3 +41,8 @@ def get_novel(slug: str, db: Session = Depends(get_db)) -> Novel:
         return NovelRepository(db).require_by_slug(slug)
     except NotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+
+def get_llm() -> LLMProvider:
+    """집필용 LLM. 테스트에서는 app.dependency_overrides로 바꿔 끼운다."""
+    return get_provider(get_settings())

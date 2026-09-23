@@ -4,9 +4,11 @@
     novel-factory analyze novel.txt --json        Reference Profile JSON
     novel-factory episodes novel.epub             회차 분리 결과만 확인
     novel-factory aggregate a.txt b.txt c.txt     여러 작품 집계 + 패턴 도출
+    novel-factory plan-story hoegwi               사건 일정 + Arc 설계
+    novel-factory write hoegwi 1 --to 30          1~30화 연속 생성 (LLM 필요)
     novel-factory serve                           API 서버 실행
 
-LLM 없이 전부 동작한다.
+write 말고는 LLM 없이 동작한다.
 """
 
 from __future__ import annotations
@@ -90,6 +92,63 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _open_novel(session, slug: str):
+    from novel_factory.database.repositories import NovelRepository
+
+    return NovelRepository(session).require_by_slug(slug)
+
+
+def _cmd_plan_story(args: argparse.Namespace) -> int:
+    from novel_factory.database import create_all, session_scope
+    from novel_factory.generation.pipeline import plan_story
+    from novel_factory.llm import get_provider
+
+    create_all()
+    provider = get_provider()
+    with session_scope() as session:
+        novel = _open_novel(session, args.slug)
+        result = plan_story(
+            session, novel, provider if provider.available else None, replace=args.replace
+        )
+        print(f"LLM 사용: {'예' if result.used_llm else '아니오 (골격만)'}")
+        for arc in result.arcs:
+            print(f"  {arc.order}. {arc.name}  {arc.start_episode}~{arc.end_episode}화")
+        for warning in result.warnings:
+            print(f"[경고] {warning}")
+    return 0
+
+
+def _cmd_write(args: argparse.Namespace) -> int:
+    from novel_factory.database import create_all, session_scope
+    from novel_factory.generation.pipeline import generate_episode
+    from novel_factory.llm import get_provider
+
+    create_all()
+    provider = get_provider()
+    if not provider.available:
+        print(
+            "LLM에 연결할 수 없습니다. NF_LLM_BASE_URL / NF_LLM_MODEL을 확인하세요.",
+            file=sys.stderr,
+        )
+        return 3
+    last = args.to or args.episode
+    for number in range(args.episode, last + 1):
+        # 회차마다 커밋한다. 중간에 멈춰도 앞 회차는 남는다.
+        with session_scope() as session:
+            novel = _open_novel(session, args.slug)
+            result = generate_episode(
+                session, novel, number, provider, replace=args.replace
+            )
+            info = result.as_dict()
+            print(
+                f"{number}화 '{info['title']}' {info['char_count']:,}자 "
+                f"훅={info['hook_type'] or '없음'} → {info['folder']}"
+            )
+            for warning in result.warnings:
+                print(f"   [경고] {warning}")
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     try:
         import uvicorn
@@ -134,6 +193,22 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate.add_argument("paths", nargs="+")
     aggregate.add_argument("--genre", default="")
     aggregate.set_defaults(func=_cmd_aggregate)
+
+    plan = sub.add_parser(
+        "plan-story", help="사건 일정과 Arc를 설계한다 (LLM 없으면 골격만)"
+    )
+    plan.add_argument("slug")
+    plan.add_argument("--replace", action="store_true", help="기존 Arc를 갈아엎는다")
+    plan.set_defaults(func=_cmd_plan_story)
+
+    write = sub.add_parser(
+        "write", help="회차를 계획부터 기억 갱신까지 생성한다 (LLM 필요)"
+    )
+    write.add_argument("slug")
+    write.add_argument("episode", type=int)
+    write.add_argument("--to", type=int, default=0, help="이 회차까지 연속 생성")
+    write.add_argument("--replace", action="store_true", help="확정된 회차를 다시 만든다")
+    write.set_defaults(func=_cmd_write)
 
     serve = sub.add_parser("serve", help="API 서버를 띄운다")
     serve.add_argument("--host", default="127.0.0.1")

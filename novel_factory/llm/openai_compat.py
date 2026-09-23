@@ -39,6 +39,7 @@ class OpenAICompatProvider(LLMProvider):
         timeout: float = 300.0,
         max_retries: int = 2,
         default_temperature: float = 0.8,
+        json_mode: bool = False,
         client: httpx.Client | None = None,
     ) -> None:
         if not base_url or not model:
@@ -51,6 +52,8 @@ class OpenAICompatProvider(LLMProvider):
         self.timeout = timeout
         self.max_retries = max_retries
         self.default_temperature = default_temperature
+        # 서버가 response_format을 지원할 때만 켠다 (NF_LLM_JSON_MODE).
+        self.json_mode = json_mode
         self._client = client
         self._owns_client = client is None
 
@@ -64,6 +67,7 @@ class OpenAICompatProvider(LLMProvider):
             timeout=cfg.llm_timeout_sec,
             max_retries=cfg.llm_max_retries,
             default_temperature=cfg.llm_temperature,
+            json_mode=cfg.llm_json_mode,
         )
 
     @property
@@ -104,6 +108,7 @@ class OpenAICompatProvider(LLMProvider):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        json_mode: bool = False,
     ) -> Completion:
         payload: dict[str, Any] = {
             "model": self.model,
@@ -117,6 +122,8 @@ class OpenAICompatProvider(LLMProvider):
             payload["max_tokens"] = max_tokens
         if stop:
             payload["stop"] = stop
+        if json_mode and self.json_mode:
+            payload["response_format"] = {"type": "json_object"}
 
         data = self._post_with_retry("/chat/completions", payload)
         return self._parse(data)
