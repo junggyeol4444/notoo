@@ -1,6 +1,7 @@
 """파일 포맷별 파서 레지스트리.
 
 기획안 5.1 지원 형식: TXT / EPUB / DOCX / PDF / Markdown
+추가: HWP(5.0) / HWPX — 한국 원고에서 가장 흔한 형식
 """
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ from novel_factory.errors import UnsupportedFormatError
 from novel_factory.reference.parser.base import BaseParser, ParsedDocument, RawChapter
 from novel_factory.reference.parser.docx import DocxParser
 from novel_factory.reference.parser.epub import EpubParser
+from novel_factory.reference.parser.hwp import HwpParser
+from novel_factory.reference.parser.hwpx import HwpxParser
 from novel_factory.reference.parser.pdf import PdfParser
 from novel_factory.reference.parser.plain import MarkdownParser, TxtParser
 
@@ -20,6 +23,8 @@ PARSERS: tuple[BaseParser, ...] = (
     EpubParser(),
     DocxParser(),
     PdfParser(),
+    HwpParser(),
+    HwpxParser(),
 )
 
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(

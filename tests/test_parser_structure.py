@@ -55,7 +55,7 @@ class TestParsers:
         assert doc.has_native_chapters
 
     def test_unsupported_extension(self, tmp_path: Path) -> None:
-        bad = tmp_path / "novel.hwp"
+        bad = tmp_path / "novel.rtf"
         bad.write_bytes(b"x")
         with pytest.raises(UnsupportedFormatError):
             parse_file(bad)
@@ -157,7 +157,13 @@ class TestCrossFormatConsistency:
     TXT 22자 / EPUB 191자로 갈렸다.
     """
 
-    FORMATS = ("sample_novel.txt", "sample_novel.md", "sample_novel.epub")
+    FORMATS = (
+        "sample_novel.txt",
+        "sample_novel.md",
+        "sample_novel.epub",
+        "sample_novel.hwp",
+        "sample_novel.hwpx",
+    )
 
     @pytest.fixture(scope="class")
     def profiles(self):

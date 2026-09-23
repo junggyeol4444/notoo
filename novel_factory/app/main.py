@@ -35,7 +35,7 @@ DESCRIPTION = """
 참고소설을 구조로 분석하고, 그 구조를 바탕으로 장편소설을 쓰기 위한 시스템.
 
 현재 구현 범위
-- Phase 1: 참고소설 분석 (TXT/EPUB/DOCX/PDF/Markdown → Reference Profile)
+- Phase 1: 참고소설 분석 (TXT/Markdown/EPUB/DOCX/PDF/HWP/HWPX → Reference Profile)
 - Phase 2: 장기기억 DB (Novel Bible, 인물, 지식, 관계, 세계관, 시간선, 복선)
 
 원칙

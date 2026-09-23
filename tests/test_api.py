@@ -92,7 +92,7 @@ class TestReferences:
         )
 
     def test_unsupported_format(self, client, tmp_path) -> None:
-        bad = tmp_path / "novel.hwp"
+        bad = tmp_path / "novel.rtf"
         bad.write_text("내용", encoding="utf-8")
         response = client.post("/references", json={"path": str(bad)})
         assert response.status_code in (400, 415)

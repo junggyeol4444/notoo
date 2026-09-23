@@ -10,8 +10,10 @@
 from __future__ import annotations
 
 import random
+import struct
 import sys
 import zipfile
+import zlib
 from pathlib import Path
 
 FIXTURE_DIR = Path(__file__).resolve().parent
@@ -365,6 +367,213 @@ def write_pdf() -> Path:
     return path
 
 
+# ---------------------------------------------------------------------------
+# HWP 5.0 / HWPX
+#
+# 실제 한컴 샘플은 라이선스 때문에 넣을 수 없어 직접 만든다. 구조는 한컴 공개
+# 규격과 실제 파일에서 확인한 배치를 따른다.
+#   HWP  : olefile(스트림)과 pyhwp 레코드 모델 파서(본문)로 읽히는 것을 확인했다.
+#   HWPX : python-hwpx에 들어 있는 한컴 빈 문서(Skeleton.hwpx)와 같은 배치다.
+# ---------------------------------------------------------------------------
+HWP_TAG_PARA_HEADER = 66
+HWP_TAG_PARA_TEXT = 67
+HWP_TAG_PARA_CHAR_SHAPE = 68
+HWP_TAG_DOCUMENT_PROPERTIES = 16
+HWP_TAG_ID_MAPPINGS = 17
+# 한컴 HWP 요약 정보는 표준 FMTID_SummaryInformation이 아니라 전용 GUID를 쓴다.
+# {9FA2B660-1061-11D4-B4C6-006097C09D8C}. 실제 한컴 파일에서 확인한 값이다.
+FMTID_HWP_SUMMARY = bytes.fromhex("60B6A29F6110D411B4C6006097C09D8C")
+
+
+def _hwp_record(tag: int, level: int, payload: bytes) -> bytes:
+    size = len(payload)
+    if size >= 0xFFF:
+        return struct.pack("<II", tag | (level << 10) | (0xFFF << 20), size) + payload
+    return struct.pack("<I", tag | (level << 10) | (size << 20)) + payload
+
+
+def _hwp_paragraph(text: str) -> bytes:
+    """최상위 문단 하나. 빈 문단은 실제 파일처럼 PARA_TEXT 없이 만든다."""
+    units = bytearray()
+    for piece in text.split("\t"):
+        if units:
+            # 탭은 8글자짜리 인라인 컨트롤이다: 코드, 매개변수 6칸, 코드
+            units += struct.pack("<8H", 9, 0, 0, 0, 0, 0, 0, 9)
+        units += piece.encode("utf-16-le")
+    units += struct.pack("<H", 13)
+    n_chars = len(units) // 2
+    header = struct.pack("<IIHBBHHHI", n_chars, 0, 0, 0, 0, 1, 0, 0, 0)
+    out = _hwp_record(HWP_TAG_PARA_HEADER, 0, header)
+    if text:
+        out += _hwp_record(HWP_TAG_PARA_TEXT, 1, bytes(units))
+    out += _hwp_record(HWP_TAG_PARA_CHAR_SHAPE, 1, struct.pack("<II", 0, 0))
+    return out
+
+
+def _deflate(data: bytes) -> bytes:
+    c = zlib.compressobj(9, zlib.DEFLATED, -15)
+    return c.compress(data) + c.flush()
+
+
+def _summary_info(title: str, author: str) -> bytes:
+    """OLE 요약 정보. 제목(2)과 작성자(4)를 VT_LPWSTR로."""
+
+    def lpwstr(value: str) -> bytes:
+        chars = value + "\x00"
+        body = struct.pack("<HHI", 0x1F, 0, len(chars)) + chars.encode("utf-16-le")
+        return body + b"\x00" * (-len(body) % 4)
+
+    # 속성 사전(PID 0). 실제 한컴 파일에는 항목 1개(ID 0, 빈 이름)짜리 사전이
+    # 들어 있고, pyhwp는 이 사전이 있다고 가정하고 읽는다.
+    dictionary = struct.pack("<III", 1, 0, 1) + b"\x00"
+    dictionary += b"\x00" * (-len(dictionary) % 4)
+    values = [(2, lpwstr(title)), (4, lpwstr(author)), (0, dictionary)]
+    table_len = 8 + 8 * len(values)
+    offsets, blob, pos = [], b"", table_len
+    for pid, value in values:
+        offsets.append((pid, pos))
+        blob += value
+        pos += len(value)
+    section = struct.pack("<II", table_len + len(blob), len(values))
+    section += b"".join(struct.pack("<II", pid, off) for pid, off in offsets) + blob
+    # 바이트순서, 버전, 시스템 식별자(0x00020105), CLSID, 구역 수 — 실제 파일과 같게
+    header = struct.pack("<HHI", 0xFFFE, 0, 0x00020105) + FMTID_HWP_SUMMARY
+    header += struct.pack("<I", 1) + FMTID_HWP_SUMMARY + struct.pack("<I", 48)
+    return header + section
+
+
+def _novel_paragraphs(text: str) -> list[str]:
+    """TXT 원고를 문단 목록으로. 빈 줄은 빈 문단이 된다 (DOCX와 같은 방식)."""
+    return text.split("\n")
+
+
+def build_hwp_bytes(text: str, title: str, author: str, *, sections: int = 2) -> bytes:
+    paragraphs = _novel_paragraphs(text)
+    per = (len(paragraphs) + sections - 1) // sections
+    streams: dict[str, bytes] = {}
+
+    file_header = bytearray(256)
+    file_header[:17] = b"HWP Document File"
+    struct.pack_into("<II", file_header, 32, 0x05000300, 1)  # 5.0.3.0, 압축
+    streams["FileHeader"] = bytes(file_header)
+
+    doc_info = _hwp_record(HWP_TAG_DOCUMENT_PROPERTIES, 0, b"\x00" * 26)
+    doc_info += _hwp_record(HWP_TAG_ID_MAPPINGS, 0, b"\x00" * 72)
+    streams["DocInfo"] = _deflate(doc_info)
+
+    for i in range(sections):
+        chunk = paragraphs[i * per : (i + 1) * per] or [""]
+        body = b"".join(_hwp_paragraph(p) for p in chunk)
+        streams[f"BodyText/Section{i}"] = _deflate(body)
+
+    streams["\x05HwpSummaryInformation"] = _summary_info(title, author)
+    streams["PrvText"] = text[:500].encode("utf-16-le")
+
+    sys.path.insert(0, str(FIXTURE_DIR))
+    from cfb_writer import build_cfb
+
+    return build_cfb(streams)
+
+
+def write_hwp(text: str) -> Path:
+    path = FIXTURE_DIR / "sample_novel.hwp"
+    path.write_bytes(build_hwp_bytes(text, "회귀한 인수합병가", "테스트 작가"))
+    return path
+
+
+_HWPX_NS = (
+    'xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" '
+    'xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"'
+)
+
+
+def _hwpx_paragraph(text: str, pid: int) -> str:
+    inner = _escape(text).replace("\t", "<hp:tab/>")
+    return (
+        f'<hp:p id="{pid}" paraPrIDRef="0" styleIDRef="0">'
+        f'<hp:run charPrIDRef="0"><hp:t>{inner}</hp:t></hp:run></hp:p>'
+    )
+
+
+def build_hwpx_bytes(text: str, title: str, author: str, *, sections: int = 2) -> bytes:
+    paragraphs = _novel_paragraphs(text)
+    per = (len(paragraphs) + sections - 1) // sections
+    section_xml: list[str] = []
+    pid = 0
+    for i in range(sections):
+        chunk = paragraphs[i * per : (i + 1) * per] or [""]
+        body = []
+        for p in chunk:
+            body.append(_hwpx_paragraph(p, pid))
+            pid += 1
+        if i == 0:
+            # 첫 문단에 머리말 컨트롤을 넣는다. 파서가 이걸 본문에 섞으면 안 된다.
+            body.insert(
+                0,
+                '<hp:p id="9999"><hp:run><hp:ctrl><hp:header><hp:subList>'
+                "<hp:p><hp:run><hp:t>머리말 — 본문 아님</hp:t></hp:run></hp:p>"
+                "</hp:subList></hp:header></hp:ctrl></hp:run></hp:p>",
+            )
+        section_xml.append(
+            f'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+            f"<hs:sec {_HWPX_NS}>{''.join(body)}</hs:sec>"
+        )
+
+    items = "".join(
+        f'<opf:item id="section{i}" href="Contents/section{i}.xml" media-type="application/xml"/>'
+        for i in range(sections)
+    )
+    # spine 순서가 파일 이름 순서와 다를 때도 spine을 따르는지 보려고 역순으로 적지 않는다.
+    # (한컴 파일은 항상 번호 순서다.) 대신 manifest에 header를 먼저 둔다.
+    spine = "".join(
+        f'<opf:itemref idref="section{i}" linear="yes"/>' for i in range(sections)
+    )
+    hpf = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+        '<opf:package xmlns:opf="http://www.idpf.org/2007/opf/" version="" unique-identifier="" id="">'
+        f"<opf:metadata><opf:title>{_escape(title)}</opf:title><opf:language>ko</opf:language>"
+        f'<opf:meta name="creator" content="text">{_escape(author)}</opf:meta></opf:metadata>'
+        '<opf:manifest><opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>'
+        f"{items}</opf:manifest>"
+        '<opf:spine><opf:itemref idref="header" linear="yes"/>'
+        f"{spine}</opf:spine></opf:package>"
+    )
+
+    import io
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/hwp+zip", zipfile.ZIP_STORED)
+        # 배치는 한컴 빈 문서(Skeleton.hwpx)와 같게 둔다.
+        zf.writestr(
+            "version.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+            '<hv:HCFVersion xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" '
+            'tagetApplication="WORDPROCESSOR" major="5" minor="1" micro="1" '
+            'buildNumber="0" os="1" xmlVersion="1.5"/>',
+        )
+        zf.writestr(
+            "META-INF/container.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+            '<ocf:container xmlns:ocf="urn:oasis:names:tc:opendocument:xmlns:container">'
+            '<ocf:rootfiles><ocf:rootfile full-path="Contents/content.hpf" '
+            'media-type="application/hwpml-package+xml"/></ocf:rootfiles></ocf:container>',
+        )
+        zf.writestr(
+            "Contents/header.xml", '<?xml version="1.0" encoding="UTF-8"?><hh:head/>'
+        )
+        zf.writestr("Contents/content.hpf", hpf)
+        for i, xml in enumerate(section_xml):
+            zf.writestr(f"Contents/section{i}.xml", xml)
+    return buf.getvalue()
+
+
+def write_hwpx(text: str) -> Path:
+    path = FIXTURE_DIR / "sample_novel.hwpx"
+    path.write_bytes(build_hwpx_bytes(text, "회귀한 인수합병가", "테스트 작가"))
+    return path
+
+
 def main() -> int:
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
     text = build_novel()
@@ -375,6 +584,8 @@ def main() -> int:
         write_epub(),
         write_docx(),
         write_pdf(),
+        write_hwp(text),
+        write_hwpx(text),
     ]
     for p in made:
         print(f"{p.name:28s} {p.stat().st_size:>9,} bytes")

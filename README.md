@@ -9,7 +9,7 @@
 
 | Phase | 내용 | 상태 |
 |---|---|---|
-| Phase 1 | 참고소설 분석 (TXT/EPUB/DOCX/PDF/Markdown → Reference Profile) | 구현 완료 |
+| Phase 1 | 참고소설 분석 (TXT/Markdown/EPUB/DOCX/PDF/**HWP/HWPX** → Reference Profile) | 구현 완료 |
 | Phase 2 | 장기기억 DB (Novel Bible / 인물 / 지식 / 관계 / 세계관 / 시간선 / 복선) | 구현 완료 |
 | Phase 3 | Writer + Reference Pattern 연동 | Context 조립까지. 집필 미구현 |
 | Phase 4~7 | Similarity Checker / 장기 테스트 / EPUB / 출판 | 지문 기반 유사도만 구현 |
@@ -91,7 +91,7 @@ novel_factory/
   text/          한국어 텍스트 처리 (인코딩·문장·대사·어휘·어절)
   reference/
     importer/    업로드 저장과 본문 추출
-    parser/      TXT · Markdown · EPUB · DOCX · PDF
+    parser/      TXT · Markdown · EPUB · DOCX · PDF · HWP · HWPX (전부 stdlib, PDF만 pypdf)
     structure/   회차 분리, 회차 내부 구간 비율
     analyzer/    기본통계 · 전개 · 클리프행어 · 캐릭터 · 관계 · 복선 · 감정 · 문체
     pattern/     다중 작품 집계, Reference Pattern Library
@@ -122,13 +122,13 @@ Reference Profile은 원문 문장도 인물 이름도 담지 않는다. 남는 
 ## 개발
 
 ```bash
-pytest                       # 163개 테스트
+pytest                       # 205개 테스트
 ruff check novel_factory     # 린트
 python tests/fixtures/make_fixtures.py    # 한국어 합성 픽스처 재생성
 ```
 
 테스트 픽스처는 한국 웹소설 표기 관습(제N화 마커, 따옴표 대사, 작은따옴표
-속마음, 회차 말미 훅)을 가진 합성 원고다. 같은 원고를 TXT/CP949/MD/EPUB/DOCX/PDF로
+속마음, 회차 말미 훅)을 가진 합성 원고다. 같은 원고를 TXT/CP949/MD/EPUB/DOCX/PDF/HWP/HWPX로
 내보내 파서별 결과가 일치하는지 검증한다.
 
 ## 문서
@@ -145,4 +145,3 @@ python tests/fixtures/make_fixtures.py    # 한국어 합성 픽스처 재생성
 - 표지 생성 · EPUB 제작 · 출판 어댑터 (기획안 43~46번)
 - 관리자 화면 (기획안 48~50번)
 - 의미 유사도 (현재 유사도 검사는 표현 유사도만 잡는다)
-- `.hwp` / `.hwpx` 파서

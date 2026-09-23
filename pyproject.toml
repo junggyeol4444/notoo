@@ -30,6 +30,8 @@ postgres = ["psycopg[binary]>=3.2", "pgvector>=0.3"]
 queue = ["celery>=5.4", "redis>=5.0"]
 dev = [
     "pytest>=8",
+    # HWP 파서의 OLE 리더를 독립 구현과 대조하는 테스트에만 쓴다
+    "olefile>=0.47",
     "pytest-cov>=5",
     "ruff>=0.6",
     "mypy>=1.11",
