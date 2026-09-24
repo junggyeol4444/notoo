@@ -124,6 +124,40 @@ class Settings(BaseSettings):
     # IANA 시간대 이름 (예: Asia/Seoul). 비우면 서버의 로컬 시간.
     scheduler_timezone: str = ""
 
+    # --- 표지 (기획안 43번) --------------------------------------------------
+    # 이미지 서버. 비우면 그림 없이 글자 표지를 만든다.
+    #   openai  OpenAI 호환 /v1/images/generations (LocalAI 등)
+    #   a1111   Stable Diffusion WebUI /sdapi/v1/txt2img (Forge 등 같은 API)
+    image_base_url: str = ""
+    image_api: Literal["openai", "a1111"] = "openai"
+    image_model: str = ""
+    image_api_key: str = ""
+    # 이미지 모델에 요청할 크기. 표지 비율(2:3)에 맞춰 잘라 cover 크기로 맞춘다.
+    image_width: int = 832
+    image_height: int = 1248
+    image_steps: int = 30
+    image_timeout_sec: float = 600.0
+    cover_width: int = 1600
+    cover_height: int = 2400
+    thumbnail_width: int = 400
+    thumbnail_height: int = 600
+    # 한글 글꼴 파일. 비우면 흔한 위치에서 찾는다 (나눔, Noto CJK, 맑은 고딕 등).
+    cover_font: str = ""
+
+    # --- 출판 (기획안 45번) --------------------------------------------------
+    # 내보낼 대상. 환경변수로는 JSON 목록으로 준다.
+    #   {"name": "files", "type": "files"}
+    #       episode_title.txt / episode_body.txt / author_note.txt / thumbnail.jpg를
+    #       data/novels/<slug>/publish/<name>/에 만든다. 사람이 플랫폼에 올린다.
+    #   {"name": "내서버", "type": "webhook", "url": "https://...", "token": "..."}
+    #       회차·전자책을 그 주소로 POST한다. 받는 쪽은 사용자가 만든 API다.
+    publish_targets: list[dict[str, str]] = Field(
+        default_factory=lambda: [{"name": "files", "type": "files"}]
+    )
+    # 대상이 실패했을 때 다시 시도하는 최대 횟수
+    publish_max_attempts: int = 3
+    publish_timeout_sec: float = 60.0
+
     # --- 분석 파라미터 ----------------------------------------------------
     # 회차 구분 마커를 못 찾았을 때 강제 분할할 기준 글자 수
     fallback_episode_chars: int = 5000

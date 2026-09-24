@@ -8,6 +8,8 @@
     POST /novels/{slug}/episodes/{n}/check          품질 검사 (fix=true면 FAIL 장면 수정)
     POST /novels/{slug}/episodes/{n}/memory         기억 갱신
     POST /novels/{slug}/episodes/{n}/generate       위 단계를 한 번에
+    POST /novels/{slug}/complete                    완결 검사 (통과하면 completed)
+    GET  /novels/{slug}/completion                  마지막 완결 검사 결과
     GET  /novels/{slug}/episodes                    회차 목록
     GET  /novels/{slug}/episodes/{n}                회차 상세
 
@@ -39,6 +41,8 @@ from novel_factory.generation.storage import save_episode_files
 from novel_factory.generation.writer import write_episode
 from novel_factory.llm.base import LLMProvider
 from novel_factory.memory.retrieval import index_episode
+from novel_factory.publishing.queue import on_episode_final
+from novel_factory.quality.completion import check_completion
 from novel_factory.quality.runner import check_and_fix
 
 router = APIRouter(prefix="/novels", tags=["writing"])
@@ -205,6 +209,7 @@ def episode_memory(
     delta = extract_memory(db, novel, episode, _require_llm(llm))
     applied = apply_memory(db, novel, episode, delta)
     indexing = index_episode(db, novel, episode)
+    on_episode_final(db, novel, number)
     folder = save_episode_files(novel, episode, get_settings())
     return {
         "number": number,
@@ -267,3 +272,30 @@ def episode_detail(
     if include_text:
         payload["text"] = e.final_text
     return payload
+
+
+@router.post("/{slug}/complete")
+def complete_novel(
+    force: bool = False,
+    use_llm: bool = True,
+    dry_run: bool = False,
+    novel: Novel = Depends(get_novel),
+    db: Session = Depends(get_db),
+    llm: LLMProvider = Depends(get_llm),
+) -> dict[str, object]:
+    """완결 검사 (기획안 47번).
+
+    FAIL이 없으면 작품을 completed로 바꾼다. force=true면 FAIL이 있어도 바꾸고
+    그 사실을 기록한다. dry_run=true면 검사만 하고 상태는 바꾸지 않는다.
+    """
+    provider = llm if use_llm and llm.available else None
+    result = check_completion(db, novel, provider, force=force, mark=not dry_run)
+    return {"status": novel.status, **result.as_dict()}
+
+
+@router.get("/{slug}/completion")
+def completion_report(novel: Novel = Depends(get_novel)) -> dict[str, object]:
+    report = (novel.extra or {}).get("completion")
+    if not report:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "완결 검사를 아직 하지 않았습니다.")
+    return report

@@ -26,10 +26,11 @@ dependencies = [
 pdf = ["pypdf>=5.0"]
 # PostgreSQL + pgvector로 옮길 때
 postgres = ["psycopg[binary]>=3.2", "pgvector>=0.3"]
-# 자동 집필 스케줄러 (기획안 42번). 아직 미구현.
-queue = ["celery>=5.4", "redis>=5.0"]
+# 표지·썸네일 JPEG 생성 (기획안 43번). EPUB 제작 자체는 표준 라이브러리로 한다.
+publish = ["pillow>=10"]
 dev = [
     "pytest>=8",
+    "pillow>=10",
     # HWP 파서의 OLE 리더를 독립 구현과 대조하는 테스트에만 쓴다
     "olefile>=0.47",
     "pytest-cov>=5",
@@ -67,6 +68,8 @@ ignore = [
 "tests/*" = ["E501"]
 # 프롬프트 템플릿의 한국어 문장은 줄을 나누면 오히려 읽기 어렵다
 "novel_factory/generation/prompts.py" = ["E501"]
+# EPUB XML 템플릿. 태그를 줄 중간에서 나누면 틀을 알아보기 어렵다
+"novel_factory/publishing/epub.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

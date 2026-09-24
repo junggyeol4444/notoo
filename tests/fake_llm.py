@@ -24,6 +24,9 @@ from typing import ClassVar
 
 from novel_factory.generation.prompts import (
     ARC_SYSTEM,
+    BLURB_SYSTEM,
+    COMPLETION_SYSTEM,
+    COVER_SYSTEM,
     EPISODE_SYSTEM,
     LOGIC_SYSTEM,
     MEMORY_SYSTEM,
@@ -59,6 +62,9 @@ def _stage(messages: list[Message]) -> str:
         ("memory", MEMORY_SYSTEM),
         ("logic", LOGIC_SYSTEM),
         ("reader", READER_SYSTEM),
+        ("cover", COVER_SYSTEM),
+        ("blurb", BLURB_SYSTEM),
+        ("completion", COMPLETION_SYSTEM),
     ):
         if system == prompt:
             return name
@@ -97,7 +103,9 @@ class ScriptedNovelist(LLMProvider):
         plant: str | None = None,
         logic_flag: str | None = None,
         fix_text: str | None = None,
+        completion_problems: bool = False,
     ) -> None:
+        self.completion_problems = completion_problems
         self.messy = messy
         self.plant = plant
         self.logic_flag = logic_flag
@@ -339,6 +347,55 @@ class ScriptedNovelist(LLMProvider):
                     {"quote": "없는 문장을 지루하다고 한다.", "reason": "지어냄"},
                 ],
                 "comment": "무난하다",
+            }
+        )
+
+    def _cover(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        return _wrap(
+            {
+                "prompt": "digital painting, a man in a dark suit on a rooftop at night, "
+                "city lights below, cinematic lighting, empty lower third",
+                "negative_prompt": "blurry, extra fingers",  # text가 빠져 있다
+            }
+        )
+
+    def _blurb(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        return _wrap(
+            {
+                "description": "죽은 인수합병가가 회귀한다. 이번에는 판을 먼저 짠다. "
+                "첫 거래가 시작된다.",
+                "keywords": "회귀",  # 목록 대신 문자열
+                "categories": ["현대판타지"],
+            }
+        )
+
+    def _completion(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        if not self.completion_problems:
+            return _wrap(
+                {
+                    "unresolved_conflicts": [],
+                    # 없는 회차를 가리키는 지적은 버려져야 한다
+                    "setting_conflicts": [
+                        {"description": "지어낸 충돌", "episodes": [999]}
+                    ],
+                    "ending_consistent": True,
+                    "ending_issues": [],
+                }
+            )
+        return _wrap(
+            {
+                "unresolved_conflicts": [
+                    {
+                        "conflict": "대성그룹과의 대결",
+                        "reason": "결말까지 언급 없음",
+                        "severity": "high",
+                    }
+                ],
+                "setting_conflicts": [
+                    {"description": "회사 이름이 바뀜", "episodes": [1, 2]}
+                ],
+                "ending_consistent": False,
+                "ending_issues": ["계획한 결말은 복수 완성인데 화해로 끝남"],
             }
         )
 

@@ -19,6 +19,8 @@ GET  /novels/{slug}/context/{episode}     Writer Context (기획안 31번)
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -66,18 +68,22 @@ from novel_factory.reference.profile import ReferenceProfile
 
 router = APIRouter(prefix="/novels", tags=["novels"])
 
+#: 제목 없이 만든 작품의 임시 제목. 작품 설계(genesis)가 이 제목이면 새로 짓는다.
+UNTITLED = "제목 미정"
+
 
 @router.post("", response_model=NovelOut, status_code=status.HTTP_201_CREATED)
 def create_novel(body: NovelCreate, db: Session = Depends(get_db)) -> Novel:
     repo = NovelRepository(db)
-    if repo.get_by_slug(body.slug) is not None:
+    slug = body.slug or f"novel-{uuid.uuid4().hex[:8]}"
+    if repo.get_by_slug(slug) is not None:
         raise HTTPException(
-            status.HTTP_409_CONFLICT, f"작품 slug '{body.slug}'은 이미 있습니다."
+            status.HTTP_409_CONFLICT, f"작품 slug '{slug}'은 이미 있습니다."
         )
     novel = repo.add(
         Novel(
-            slug=body.slug,
-            title=body.title,
+            slug=slug,
+            title=body.title or UNTITLED,
             genre=body.genre,
             logline=body.logline,
             premise=body.premise,

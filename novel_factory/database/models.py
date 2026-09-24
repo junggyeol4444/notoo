@@ -17,6 +17,7 @@
   ReferenceLink    작품-참고작 연결과 참고 강도 (기획안 16번)
   ReferencePatternRow  재사용 패턴 (기획안 19번)
   MemoryChunk      의미 검색용 조각 (기획안 41번)
+  Publication      출판 대기열과 기록 (기획안 42·45번)
 
 JSON 컬럼을 쓰는 곳이 있다. 분석 결과처럼 스키마가 자주 바뀌고
 질의 대상이 아닌 값만 JSON으로 둔다. 검색·정렬에 쓰는 값은 전부 컬럼이다.
@@ -503,3 +504,41 @@ class MemoryChunk(TimestampMixin, Base):
     content: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+# ---------------------------------------------------------------------------
+# 출판
+# ---------------------------------------------------------------------------
+class Publication(TimestampMixin, Base):
+    """출판 대기열 한 줄 (기획안 42번 Publishing Queue, 45번 Publisher Adapter).
+
+    회차 하나(kind=episode) 또는 전자책 한 권(kind=ebook)을 한 대상(target)에
+    내보내는 일 하나다. 대상마다 한 줄씩 쌓인다.
+
+    status
+      queued     처리 대기
+      exported   파일로 내보냈다. 사람이 플랫폼에 올려야 한다 (공식 API가 없는 경우)
+      published  대상의 API가 받았다
+      failed     재시도 횟수를 넘겼다
+    """
+
+    __tablename__ = "publications"
+    __table_args__ = (
+        Index("ix_publication_status", "status"),
+        Index("ix_publication_novel", "novel_id", "kind", "episode_number"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    novel_id: Mapped[int] = mapped_column(
+        ForeignKey("novels.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(20), default="episode")  # episode / ebook
+    episode_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str] = mapped_column(Text, default="")
+    location: Mapped[str] = mapped_column(Text, default="")  # 내보낸 폴더나 응답의 URL
+    external_id: Mapped[str] = mapped_column(String(200), default="")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

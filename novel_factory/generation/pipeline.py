@@ -50,6 +50,7 @@ from novel_factory.generation.storage import save_episode_files
 from novel_factory.generation.writer import write_episode
 from novel_factory.llm.base import LLMProvider
 from novel_factory.memory.retrieval import SCENE, index_episode
+from novel_factory.publishing.queue import on_episode_final
 from novel_factory.quality.runner import check_and_fix
 from novel_factory.reference.similarity import FingerprintIndex
 
@@ -278,6 +279,8 @@ def generate_episode(
     )
     timings["memory"] = time.perf_counter() - started
     warnings.extend(f"기억 갱신: {r}" for r in applied.rejected)
+    # publishing_mode가 automatic이면 출판 대기열에 넣는다 (기획안 42·45번).
+    on_episode_final(session, novel, number)
 
     folder = save_episode_files(novel, planned.episode, cfg) if save_files else None
     if novel.status == "planning":

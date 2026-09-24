@@ -233,3 +233,46 @@ class ReaderOut(_Lenient):
     scores: ReaderScores
     boring_parts: list[BoringPart] = Field(default_factory=list)  # 지루한 구간
     comment: str = ""
+
+
+# ---------------------------------------------------------------------------
+# 표지 (기획안 43번)
+# ---------------------------------------------------------------------------
+class CoverPromptOut(_Lenient):
+    prompt: str = Field(min_length=10)
+    negative_prompt: str = ""
+
+
+# ---------------------------------------------------------------------------
+# 전자책 작품 소개 (기획안 46번)
+# ---------------------------------------------------------------------------
+class BlurbOut(_Lenient):
+    description: str = Field(min_length=10)
+    keywords: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+
+    _lists = field_validator("keywords", "categories", mode="before")(_as_list)
+
+
+# ---------------------------------------------------------------------------
+# 완결 검사 (기획안 47번)
+# ---------------------------------------------------------------------------
+class UnresolvedConflict(_Lenient):
+    conflict: str = Field(min_length=1)
+    reason: str = ""
+    severity: str = "low"
+
+
+class SettingConflict(_Lenient):
+    description: str = Field(min_length=1)
+    episodes: list[int] = Field(default_factory=list)
+    severity: str = "low"
+
+
+class CompletionOut(_Lenient):
+    unresolved_conflicts: list[UnresolvedConflict] = Field(default_factory=list)
+    setting_conflicts: list[SettingConflict] = Field(default_factory=list)
+    ending_consistent: bool = True
+    ending_issues: list[str] = Field(default_factory=list)
+
+    _lists = field_validator("ending_issues", mode="before")(_as_list)

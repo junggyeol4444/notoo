@@ -82,14 +82,14 @@ SPEECH_VERBS: tuple[str, ...] = (
 AGE_WINDOW = 20
 
 
-def _name_forms(c: Character) -> list[str]:
+def name_forms(c: Character) -> list[str]:
     forms = [c.name]
     if len(c.name) == 3:
         forms.append(c.name[1:])
     return forms
 
 
-def _name_pattern(forms: list[str]) -> re.Pattern[str]:
+def name_pattern(forms: list[str]) -> re.Pattern[str]:
     # 앞 글자가 한글이면 다른 단어의 일부다 ("연구소서연" 같은 우연을 막는다).
     alts = "|".join(re.escape(f) for f in sorted(forms, key=len, reverse=True))
     return re.compile(rf"(?<![{_HANGUL}])(?:{alts})")
@@ -159,7 +159,7 @@ def check_continuity(session: Session, novel: Novel, episode: Episode) -> CheckR
 
     characters = CharacterRepository(session).for_novel(novel.id)
     for c in characters:
-        pattern = _name_pattern(_name_forms(c))
+        pattern = name_pattern(name_forms(c))
         hits = _sentences_with(pattern, text)
 
         dead = not c.is_alive and c.exit_episode is not None and c.exit_episode < n

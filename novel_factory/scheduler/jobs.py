@@ -2,7 +2,7 @@
 
     Episode Planner → Reference Pattern Retrieval → Context Retrieval → Scene Planning
     → Draft → Continuity / Logic / Similarity / Style Check → Rewrite → Final
-    → Memory Update → (Publishing Queue: 기획안 45번, 아직 없음)
+    → Memory Update → Publishing Queue (publishing_mode가 automatic인 작품)
 
 위 흐름은 generate_episode()가 한 회차씩 한다. 여기서는 어느 작품의 몇 화를 쓸지와
 언제 멈출지만 정한다.
@@ -16,7 +16,8 @@
 멈추는 경우 (paused=True)
   - 고친 뒤에도 품질 검사 FAIL이 남았다. 그 회차는 기억 갱신을 하지 않고
     status "held"로 남긴다. 사람이 확인해서 /memory로 확정하거나 다시 만든다.
-  - 목표 회차(planned_episodes)까지 다 썼다.
+  - 목표 회차(planned_episodes)까지 다 썼다. 이때 완결 검사(기획안 47번)를 돌려
+    통과하면 작품을 completed로 바꾸고 자동 집필을 끈다. 실패하면 사유를 남긴다.
 멈추지 않고 이번 실행만 끝내는 경우 (다음 실행에 다시 시도)
   - LLM 서버에 연결할 수 없다.
   - 생성 도중 예외가 났다. 그 회차는 롤백된다.
@@ -43,6 +44,8 @@ from novel_factory.database.repositories import ArcRepository
 from novel_factory.errors import NovelFactoryError
 from novel_factory.generation.pipeline import generate_episode, plan_story
 from novel_factory.llm import LLMProvider, get_provider
+from novel_factory.publishing.queue import auto_publish
+from novel_factory.quality.completion import check_completion
 
 logger = logging.getLogger("novel_factory.scheduler")
 
@@ -140,9 +143,13 @@ class NovelRunResult:
     paused: str = ""  # 이번 실행에서 멈춘 이유
     error: str = ""
     warnings: list[str] = field(default_factory=list)
+    publishing: dict[str, object] = field(default_factory=dict)
+    completion: str = ""
 
     def as_dict(self) -> dict[str, object]:
         return {
+            "completion": self.completion,
+            "publishing": self.publishing,
             "slug": self.slug,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -254,7 +261,18 @@ def _run_novel(
                     break
                 number = next_episode_number(session, novel)
                 if number > novel.planned_episodes:
-                    reason = f"목표 {novel.planned_episodes}화까지 모두 썼음"
+                    # 다 썼으면 완결 검사 (기획안 47번). 통과해야 completed가 된다.
+                    completion = check_completion(session, novel, llm, settings=cfg)
+                    result.completion = completion.report.summary()
+                    if completion.completed:
+                        reason = f"목표 {novel.planned_episodes}화까지 쓰고 완결 검사 통과"
+                        update_schedule(novel, enabled=False)
+                    else:
+                        reason = (
+                            f"목표 {novel.planned_episodes}화까지 썼으나 완결 검사 FAIL ("
+                            + completion.report.summary().replace("\n", ", ")
+                            + ")"
+                        )
                     pause(novel, reason)
                     result.paused = reason
                     break
@@ -283,6 +301,16 @@ def _run_novel(
     except Exception as exc:  # 어떤 실패든 기록하고 다음 실행을 기다린다
         logger.exception("자동 집필 실패: %s", result.slug)
         result.error = f"{type(exc).__name__}: {exc}"
+
+    # 출판 (Publishing Queue). 집필이 실패해도 앞서 확정된 회차는 내보낸다.
+    try:
+        with factory() as session, session.begin():
+            novel = session.get(Novel, novel_id)
+            assert novel is not None
+            result.publishing = auto_publish(session, novel, llm, settings=cfg)
+    except Exception as exc:  # 출판 실패가 집필 기록을 막지 않게 한다
+        logger.exception("자동 출판 실패: %s", result.slug)
+        result.warnings.append(f"출판 단계 실패: {type(exc).__name__}: {exc}")
 
     _finish(factory, novel_id, result)
     return result

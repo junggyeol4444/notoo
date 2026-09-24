@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,6 +59,7 @@ class AspectWeights(BaseModel):
     cliffhanger: float | None = Field(default=None, ge=0.0, le=1.0)
     foreshadowing: float | None = Field(default=None, ge=0.0, le=1.0)
     relationship: float | None = Field(default=None, ge=0.0, le=1.0)
+    character_structure: float | None = Field(default=None, ge=0.0, le=1.0)
     event_interval: float | None = Field(default=None, ge=0.0, le=1.0)
     emotion: float | None = Field(default=None, ge=0.0, le=1.0)
     dialogue: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -80,10 +81,14 @@ class NovelReferenceLinkIn(BaseModel):
 # 작품
 # ---------------------------------------------------------------------------
 class NovelCreate(BaseModel):
-    """POST /novels (기획안 54번)."""
+    """POST /novels (기획안 54번).
 
-    slug: str = Field(min_length=1, max_length=64)
-    title: str
+    기획안의 예시처럼 장르·회차 수·분량만 줘도 만든다. slug를 비우면 새로 짓고,
+    제목을 비우면 '제목 미정'으로 둔다 (작품 설계 단계에서 LLM이 제목을 짓는다).
+    """
+
+    slug: str = Field(default="", max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
+    title: str = ""
     genre: str = ""
     logline: str = ""
     premise: str = ""
@@ -96,7 +101,7 @@ class NovelCreate(BaseModel):
     characters_per_episode: int = Field(
         default=5000, ge=500, le=50000, description="회차당 목표 글자 수"
     )
-    publishing_mode: str = "manual"
+    publishing_mode: Literal["manual", "automatic"] = "manual"
     reference_ids: list[str] = Field(default_factory=list)
 
 

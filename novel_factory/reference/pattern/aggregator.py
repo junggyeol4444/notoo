@@ -26,6 +26,7 @@ ASPECTS: tuple[str, ...] = (
     "cliffhanger",  # 클리프행어
     "foreshadowing",  # 복선
     "relationship",  # 캐릭터 관계 변화
+    "character_structure",  # 캐릭터 구조 (주연·조연·적대자 수, 새 인물 등장 간격)
     "event_interval",  # 사건 발생 주기
     "emotion",  # 감정곡선
     "dialogue",  # 대사 비율
@@ -46,6 +47,11 @@ _METRIC_ASPECT: dict[str, str] = {
     "avg_paragraph_length": "style",
     "foreshadow_avg_span": "foreshadowing",
     "emotion_volatility": "emotion",
+    "protagonist_count": "character_structure",
+    "supporting_count": "character_structure",
+    "antagonist_count": "character_structure",
+    "character_intro_interval": "character_structure",
+    "character_appearance_gap": "character_structure",
 }
 
 #: 변동계수가 이 값을 넘으면 '작품마다 제각각'이라 공통 공식으로 못 쓴다.

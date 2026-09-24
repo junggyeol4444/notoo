@@ -15,7 +15,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from novel_factory.app.routers import memory, novels, references, schedule, writing
+from novel_factory.app.routers import (
+    memory,
+    novels,
+    publishing,
+    references,
+    schedule,
+    writing,
+)
 from novel_factory.app.schemas import HealthOut
 from novel_factory.config import get_settings
 from novel_factory.database.base import create_all
@@ -84,6 +91,7 @@ app.include_router(novels.router)
 app.include_router(writing.router)
 app.include_router(memory.router)
 app.include_router(schedule.router)
+app.include_router(publishing.router)
 
 
 @app.exception_handler(NotFoundError)

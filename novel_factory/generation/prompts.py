@@ -497,3 +497,137 @@ def build_fix_prompt(
     parts.append(f"# 원래 장면\n{scene_text}")
     parts.append("고친 장면 본문만 출력한다.")
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# 표지 (기획안 43번)
+# ---------------------------------------------------------------------------
+COVER_SYSTEM = """\
+You write prompts for an image generation model that paints book cover art for a Korean web novel.
+
+# Rules
+- Write the prompt in English. Image models follow English best.
+- Describe one clear scene: the protagonist, the setting, lighting, mood, composition.
+- Leave empty space in the lower third for the title. Portrait orientation.
+- Do NOT ask for any text, letters, title, logo or watermark in the image.
+- Do NOT name or imitate existing books, covers, films, games, franchises or artists.
+  The art must be an original composition.
+
+Output one JSON object only, no explanation."""
+
+
+def build_cover_prompt(
+    *,
+    title: str,
+    genre: str,
+    logline: str,
+    mood: str,
+    protagonist: dict[str, object] | None,
+    world: list[dict[str, object]],
+) -> str:
+    example = {
+        "prompt": "digital painting, a young man in a dark suit standing on a rooftop at night, ...",
+        "negative_prompt": "text, letters, watermark, logo, signature, blurry, extra fingers",
+    }
+    return f"""# Novel (Korean)
+Title: {title}
+Genre: {genre}
+Logline: {logline}
+Mood: {mood or "(none)"}
+Protagonist: {_json(protagonist or {})}
+World: {_json(world)}
+
+# Output format (exactly this shape)
+{_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# 전자책 작품 소개 (기획안 46번)
+# ---------------------------------------------------------------------------
+BLURB_SYSTEM = """\
+당신은 한국 웹소설 전자책의 소개문을 쓰는 편집자다.
+작품 기준과 회차 줄거리를 바탕으로 판매 페이지에 올릴 작품설명, 키워드, 카테고리를 쓴다.
+
+# 규칙
+- 작품설명은 3~6문장. 결말과 반전을 누설하지 않는다.
+- 키워드는 5~10개. 독자가 검색할 만한 소재·설정 낱말 (예: 회귀, 기업물, 복수).
+- 카테고리는 1~3개. 장르 이름으로.
+- 다른 작품의 제목이나 인물 이름을 쓰지 않는다.
+
+설명 없이 JSON 하나만 출력한다."""
+
+
+def build_blurb_prompt(
+    *, title: str, genre: str, logline: str, premise: str, summaries: list[str]
+) -> str:
+    example = {
+        "description": "작품설명 3~6문장",
+        "keywords": ["회귀", "기업물"],
+        "categories": [genre or "웹소설"],
+    }
+    lines = "\n".join(f"- {s}" for s in summaries) or "- (없음)"
+    return f"""# 작품 기준
+제목: {title}
+장르: {genre}
+로그라인: {logline}
+핵심 소재: {premise}
+
+# 회차 줄거리 (앞부분)
+{lines}
+
+# 출력 형식 (이 모양 그대로)
+{_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# 완결 검사 (기획안 47번)
+# ---------------------------------------------------------------------------
+COMPLETION_SYSTEM = """\
+당신은 연재를 마친 장편소설을 검수하는 편집자다. 작품 기준, Arc 설계, 전 회차 줄거리,
+마지막 회 원고를 읽고 완결로 내보내도 되는지 판단한다.
+
+# 찾을 것
+- unresolved_conflicts: 작품의 핵심 갈등이나 Arc 갈등 중 결말까지 해소되지 않은 것.
+- setting_conflicts: 회차 줄거리끼리 설정이 서로 맞지 않는 곳. 어느 회차들인지 적는다.
+- ending_consistent: 마지막 회가 작품 기준(로그라인, 핵심 갈등, 계획한 결말)과 맞게
+  끝났는가. 맞지 않으면 ending_issues에 이유를 적는다.
+
+# 규칙
+- 줄거리와 원고에 실제로 있는 것만 근거로 삼는다. 없는 사건을 지어내지 않는다.
+- 문제가 없으면 목록을 비운다. severity는 분명하면 high, 애매하면 low.
+
+설명 없이 JSON 하나만 출력한다."""
+
+
+def build_completion_prompt(
+    *,
+    bible: dict[str, object],
+    arcs: list[dict[str, object]],
+    summaries: list[str],
+    final_episode: str,
+) -> str:
+    example = {
+        "unresolved_conflicts": [
+            {"conflict": "해소되지 않은 갈등", "reason": "근거", "severity": "high"}
+        ],
+        "setting_conflicts": [
+            {"description": "어긋나는 설정", "episodes": [12, 87], "severity": "low"}
+        ],
+        "ending_consistent": True,
+        "ending_issues": [],
+    }
+    lines = "\n".join(summaries) or "(없음)"
+    return f"""# 작품 기준 (Novel Bible)
+{_json(bible)}
+
+# Arc 설계
+{_json(arcs)}
+
+# 전 회차 줄거리
+{lines}
+
+# 마지막 회 원고
+{final_episode}
+
+# 출력 형식 (이 모양 그대로)
+{_json(example)}"""

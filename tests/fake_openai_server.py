@@ -18,7 +18,20 @@ from fastapi import FastAPI, Request
 from novel_factory.llm.base import Message
 
 
-def build_app(novelist, *, fail_first: int = 0, embedder=None) -> FastAPI:
+def _png(color: tuple[int, int, int], width: int, height: int) -> str:
+    import base64
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), color).save(buf, "PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def build_app(
+    novelist, *, fail_first: int = 0, embedder=None, images: bool = False
+) -> FastAPI:
     """fail_first만큼 첫 요청을 503으로 돌려 재시도 경로를 태운다.
 
     embedder를 주면 /v1/embeddings도 연다. 응답 순서는 일부러 뒤집어서, 클라이언트가
@@ -47,6 +60,24 @@ def build_app(novelist, *, fail_first: int = 0, embedder=None) -> FastAPI:
             for i, v in enumerate(vectors)
         ]
         return {"object": "list", "model": body.get("model"), "data": data[::-1]}
+
+    @app.post("/v1/images/generations")
+    async def images_generations(request: Request):
+        body = await request.json()
+        state["requests"].append(body)
+        if not images:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse({"error": "no image model"}, status_code=404)
+        w, h = (int(x) for x in body["size"].split("x"))
+        return {"created": 0, "data": [{"b64_json": _png((200, 30, 30), w, h)}]}
+
+    @app.post("/sdapi/v1/txt2img")
+    async def txt2img(request: Request):
+        body = await request.json()
+        state["requests"].append(body)
+        png = _png((30, 30, 200), body["width"], body["height"])
+        return {"images": ["data:image/png;base64," + png], "parameters": {}}
 
     @app.post("/v1/chat/completions")
     async def chat(request: Request):

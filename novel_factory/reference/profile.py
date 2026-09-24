@@ -123,6 +123,16 @@ class ReferenceProfile:
             if self.characters
             else 0,
             "antagonist_count": self.characters.antagonist_count if self.characters else 0,
+            "supporting_count": self.characters.supporting_count if self.characters else 0,
+            # 이름 있는 인물 한 명이 새로 나오는 데 걸리는 회차 수
+            "character_intro_interval": (
+                round((b.episode_count if b else 0) / len(self.characters.characters), 2)
+                if self.characters and self.characters.characters
+                else None
+            ),
+            "character_appearance_gap": (
+                round(self.characters.avg_appearance_gap, 2) if self.characters else None
+            ),
             "foreshadow_avg_span": (
                 round(self.foreshadowing.avg_span, 2) if self.foreshadowing else 0.0
             ),
