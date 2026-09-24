@@ -37,6 +37,7 @@ from novel_factory.generation.guidance import GenreGuidance, load_guidance
 from novel_factory.generation.prompts import WRITER_SYSTEM, build_fix_prompt
 from novel_factory.generation.writer import assemble_text, write_scene
 from novel_factory.llm.base import LLMProvider, Message
+from novel_factory.memory.retrieval import plan_query
 from novel_factory.quality.continuity import check_continuity
 from novel_factory.quality.logic import check_logic
 from novel_factory.quality.reader import simulate_readers
@@ -246,6 +247,7 @@ def check_and_fix(
                 + cfg.writer_tail_chars
                 + NEXT_HEAD_CHARS,
                 character_codes=list(plan.get("characters") or []) or None,
+                query=plan_query(plan),
             )
 
         texts = _scene_texts(episode)

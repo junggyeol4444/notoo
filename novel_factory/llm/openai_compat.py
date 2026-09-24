@@ -129,35 +129,7 @@ class OpenAICompatProvider(LLMProvider):
         return self._parse(data)
 
     def _post_with_retry(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        last_error: Exception | None = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = self.client.post(path, json=payload)
-            except httpx.HTTPError as exc:
-                last_error = exc
-            else:
-                if response.status_code < 400:
-                    try:
-                        return response.json()
-                    except ValueError as exc:
-                        raise LLMError(
-                            f"LLM 응답이 JSON이 아닙니다: {response.text[:200]}"
-                        ) from exc
-                if response.status_code not in _RETRY_STATUS:
-                    raise LLMError(
-                        f"LLM 요청 실패 [{response.status_code}]: {response.text[:300]}"
-                    )
-                last_error = LLMError(
-                    f"LLM 요청 실패 [{response.status_code}]: {response.text[:200]}"
-                )
-
-            if attempt < self.max_retries:
-                # 로컬 서버가 다른 요청을 처리 중일 때가 많다. 지수 백오프.
-                time.sleep(2**attempt)
-
-        raise LLMError(
-            f"LLM 호출이 {self.max_retries + 1}번 모두 실패했습니다: {last_error}"
-        ) from last_error
+        return post_json_with_retry(self.client, path, payload, self.max_retries)
 
     @staticmethod
     def _parse(data: dict[str, Any]) -> Completion:
@@ -179,3 +151,41 @@ class OpenAICompatProvider(LLMProvider):
             finish_reason=choice.get("finish_reason") or "",
             raw=data,
         )
+
+
+def post_json_with_retry(
+    client: httpx.Client, path: str, payload: dict[str, Any], max_retries: int
+) -> dict[str, Any]:
+    """POST하고 JSON을 받는다. 연결 오류와 일시 오류(_RETRY_STATUS)는 다시 시도한다.
+
+    채팅과 임베딩 클라이언트가 같이 쓴다.
+    """
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.post(path, json=payload)
+        except httpx.HTTPError as exc:
+            last_error = exc
+        else:
+            if response.status_code < 400:
+                try:
+                    return response.json()
+                except ValueError as exc:
+                    raise LLMError(
+                        f"LLM 응답이 JSON이 아닙니다: {response.text[:200]}"
+                    ) from exc
+            if response.status_code not in _RETRY_STATUS:
+                raise LLMError(
+                    f"LLM 요청 실패 [{response.status_code}]: {response.text[:300]}"
+                )
+            last_error = LLMError(
+                f"LLM 요청 실패 [{response.status_code}]: {response.text[:200]}"
+            )
+
+        if attempt < max_retries:
+            # 로컬 서버가 다른 요청을 처리 중일 때가 많다. 지수 백오프.
+            time.sleep(2**attempt)
+
+    raise LLMError(
+        f"LLM 호출이 {max_retries + 1}번 모두 실패했습니다: {last_error}"
+    ) from last_error

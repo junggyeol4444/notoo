@@ -38,6 +38,7 @@ from novel_factory.generation.scene_planner import plan_scenes
 from novel_factory.generation.storage import save_episode_files
 from novel_factory.generation.writer import write_episode
 from novel_factory.llm.base import LLMProvider
+from novel_factory.memory.retrieval import index_episode
 from novel_factory.quality.runner import check_and_fix
 
 router = APIRouter(prefix="/novels", tags=["writing"])
@@ -203,8 +204,14 @@ def episode_memory(
     episode = _episode_or_404(db, novel, number)
     delta = extract_memory(db, novel, episode, _require_llm(llm))
     applied = apply_memory(db, novel, episode, delta)
+    indexing = index_episode(db, novel, episode)
     folder = save_episode_files(novel, episode, get_settings())
-    return {"number": number, "applied": applied.as_dict(), "folder": str(folder)}
+    return {
+        "number": number,
+        "applied": applied.as_dict(),
+        "index_warnings": indexing,
+        "folder": str(folder),
+    }
 
 
 @router.post("/{slug}/episodes/{number}/generate")

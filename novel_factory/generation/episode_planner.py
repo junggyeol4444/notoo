@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from novel_factory.config import Settings, get_settings
 from novel_factory.database.models import Episode, Novel
 from novel_factory.database.repositories import (
+    ArcRepository,
     CharacterRepository,
     EpisodeRepository,
     ForeshadowingRepository,
@@ -245,8 +246,14 @@ def plan_episode(
 
     guide = guidance or load_guidance(session, novel)
     directives = compute_directives(session, novel, episode_number, guide)
+    arc = ArcRepository(session).containing_episode(novel.id, episode_number)
+    # 회수할 복선이 설치된 장면과 Arc 목표에 가까운 장면을 앞 회차에서 찾는다.
+    query = " ".join(
+        [str(d["description"]) for d in directives.due_foreshadowings]
+        + ([arc.goal, arc.conflict] if arc is not None else [])
+    )
     _ctx, block, report = prepare_context(
-        session, novel, episode_number, cfg, output_tokens=PLAN_OUTPUT_TOKENS
+        session, novel, episode_number, cfg, output_tokens=PLAN_OUTPUT_TOKENS, query=query
     )
 
     prompt = build_episode_prompt(

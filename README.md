@@ -114,11 +114,12 @@ novel_factory/
     profile.py   Reference Profile
     pipeline.py  전체 파이프라인
   database/      15개 테이블, 리포지토리, 벡터 검색
-  memory/        Writer Context 조립
+  memory/        Writer Context 조립, 장편 기억 검색 (기획안 41번)
   generation/    Phase 3 집필 (사건 일정 · Arc · 회차 계획 · 장면 설계 · Writer · 기억 갱신)
   quality/       반복 표현 · Continuity · Logic · Style · Hook · Reader 검사, 자동 수정 (기획안 33~38번)
-  llm/           로컬 OpenAI 호환 클라이언트
-  app/           FastAPI (38개 엔드포인트)
+  llm/           로컬 OpenAI 호환 클라이언트 (채팅 · 임베딩)
+  scheduler/     자동 집필 스케줄러 (기획안 42번, 서버 내장)
+  app/           FastAPI (46개 엔드포인트)
   cli.py
 ```
 
@@ -139,7 +140,7 @@ Reference Profile은 원문 문장도 인물 이름도 담지 않는다. 남는 
 ## 개발
 
 ```bash
-pytest                       # 305개 테스트
+pytest                       # 338개 테스트
 ruff check novel_factory     # 린트
 python tests/fixtures/make_fixtures.py    # 한국어 합성 픽스처 재생성
 ```
@@ -152,15 +153,56 @@ python tests/fixtures/make_fixtures.py    # 한국어 합성 픽스처 재생성
 
 ```
 plan-story   사건 일정(결정적) → Arc 골격(결정적) → Arc 내용(LLM)
-write N      회차 지시 계산 → 회차 계획(LLM) → 장면 설계(LLM)
+write N      회차 지시 계산 → 앞 회차 관련 장면 검색 → 회차 계획(LLM) → 장면 설계(LLM)
              → 장면 단위 집필(LLM, 짧거나 잘리면 이어쓰기)
              → 장면별 참고작 유사도 검사 → FAIL 장면만 재작성
              → 품질 검사 Continuity · Logic(LLM) · Similarity · Style · Hook
              → FAIL 장면만 고쳐 쓰고 재검사 (NF_QUALITY_FIX_ROUNDS, 기본 2번)
              → (Reader Simulation, NF_QUALITY_READER=true일 때)
              → 기억 갱신(LLM 추출 → 코드 검증 → DB 반영, 고친 원고 기준)
+             → 장면 색인 (다음 회차부터 검색 대상)
              → data/novels/<slug>/episode_NNN/ 저장 (기획안 40번 구조)
 ```
+
+## 장편 기억 검색 (기획안 41번)
+
+최근 5화 요약만으로는 30화 전에 나온 장면을 다시 꺼낼 수 없다. 이번 화 계획(사건·갈등·
+보상·훅, 회차 계획 단계에서는 회수할 복선과 Arc 목표)으로 **앞 회차** 장면을 찾아
+원고 발췌로 Writer에게 보여 준다. 이번 화와 뒤 회차는 찾지 않는다.
+
+| `NF_MEMORY_SEARCH` | 방식 |
+|---|---|
+| `auto` (기본) | 임베딩 모델이 설정돼 있으면 의미 검색, 아니면 어휘 검색. 임베딩이 실패해도 어휘 검색으로 넘어간다 |
+| `embedding` | 의미 검색만. 로컬 서버의 `/v1/embeddings` (`NF_EMBEDDING_MODEL`, 주소는 `NF_EMBEDDING_BASE_URL` 또는 `NF_LLM_BASE_URL`) |
+| `lexical` | 어휘 검색만. 음절 2-gram BM25, 모델 없이 돈다 |
+| `off` | 검색하지 않는다 |
+
+```bash
+curl ".../novels/hoegwi/memory/search?q=검은 봉투&before=30"   # 30화를 쓸 때 보이는 범위
+curl -X POST ".../novels/hoegwi/memory/reindex"                 # 임베딩 모델을 켜거나 바꾼 뒤
+```
+
+## 자동 집필 스케줄러 (기획안 42번)
+
+API 서버 안에서 매일 `NF_SCHEDULER_TIME`(기본 03:00)에 돈다. **작품마다 켜야** 쓴다.
+
+```bash
+curl -X PUT ".../novels/hoegwi/schedule" -d '{"enabled": true, "episodes_per_run": 2}'
+curl ".../scheduler"                          # 다음 실행 시각, 마지막 결과
+curl -X POST ".../novels/hoegwi/schedule/run" # 지금 실행 (백그라운드, wait=true면 기다림)
+novel-factory run-schedule                    # 서버 없이 한 번 실행
+```
+
+- 고친 뒤에도 품질 검사 FAIL이 남으면 그 회차는 **기억 갱신을 하지 않고**
+  `held`로 두고 그 작품을 멈춘다. 확인한 뒤 `POST .../episodes/{n}/memory`로
+  확정하거나 `generate?replace=true`로 다시 만들고, `POST .../schedule/resume`으로 재개한다.
+- 목표 회차까지 다 쓰면 멈춘다.
+- LLM 서버가 꺼져 있거나 생성 중 오류가 나면 멈추지 않고 다음 실행에 다시 시도한다.
+  오류가 난 회차는 롤백된다.
+- 서버가 꺼져 있던 시각의 실행은 몰아서 하지 않는다.
+- 같은 날짜의 예약 실행은 작품마다 한 번만 한다. 그래도 워커를 여러 개 띄우면
+  동시에 돌 수 있으니 서버는 워커 하나로 띄운다.
+- 기획안 42번 마지막 단계인 Publishing Queue는 출판(45번)이 아직 없어서 빠져 있다.
 
 ## 품질 검사 (기획안 34~38번)
 
@@ -206,9 +248,9 @@ LLM 출력은 그대로 믿지 않는다. 없는 인물·복선 코드는 지우
 
 ## 아직 없는 것
 
-- 자동 집필 스케줄러 (기획안 42번)
 - 표지 생성 · EPUB 제작 · 출판 어댑터 (기획안 43~46번)
 - 관리자 화면 (기획안 48~50번)
 - 의미 유사도 (현재 유사도 검사는 표현 유사도만 잡는다. 기획안 36번의 장면 진행 순서·
   고유 설정·캐릭터 조합·사건 해결 방식 유사는 아직 못 본다)
 - 완결 검사 (기획안 47번)
+- Publishing Queue (기획안 42번 마지막 단계, 45번 출판과 함께)

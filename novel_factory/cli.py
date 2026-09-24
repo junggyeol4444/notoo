@@ -7,6 +7,8 @@
     novel-factory plan-story hoegwi               사건 일정 + Arc 설계
     novel-factory write hoegwi 1 --to 30          1~30화 연속 생성 (LLM 필요)
     novel-factory check hoegwi 3                  3화 품질 검사 (LLM 없으면 규칙 검사만)
+    novel-factory run-schedule                    자동 집필이 켜진 작품을 지금 쓴다
+    novel-factory run-schedule hoegwi             이 작품만 지금 쓴다 (꺼져 있어도)
     novel-factory serve                           API 서버 실행
 
 write 말고는 LLM 없이 동작한다. check는 LLM이 있으면 Logic 검사까지 한다.
@@ -192,6 +194,33 @@ def _cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run_schedule(args: argparse.Namespace) -> int:
+    """서버 없이 스케줄러 작업을 한 번 돌린다. OS 작업 스케줄러에 걸어도 된다."""
+    from novel_factory.database import create_all, session_scope
+    from novel_factory.scheduler import jobs
+
+    create_all()
+    if args.slug:
+        with session_scope() as session:
+            novel_id = _open_novel(session, args.slug).id
+        results = [jobs.run_novel(novel_id, require_enabled=False)]
+    else:
+        results = jobs.run_all()
+        if not results:
+            print("자동 집필이 켜진 작품이 없습니다 (PUT /novels/{slug}/schedule).")
+    for r in results:
+        written = ", ".join(f"{n}화" for n in r.written) or "없음"
+        print(f"{r.slug}: 쓴 회차 {written}")
+        for label, value in (
+            ("건너뜀", r.skipped),
+            ("멈춤", r.paused),
+            ("오류", r.error),
+        ):
+            if value:
+                print(f"   [{label}] {value}")
+    return 1 if any(r.error for r in results) else 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     try:
         import uvicorn
@@ -260,6 +289,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--reader", action="store_true", help="Reader Simulation도 돌린다 (LLM 필요)"
     )
     check.set_defaults(func=_cmd_check)
+
+    run = sub.add_parser("run-schedule", help="자동 집필 작업을 지금 한 번 돌린다")
+    run.add_argument(
+        "slug", nargs="?", default="", help="이 작품만 (비우면 켜진 작품 전부)"
+    )
+    run.set_defaults(func=_cmd_run_schedule)
 
     serve = sub.add_parser("serve", help="API 서버를 띄운다")
     serve.add_argument("--host", default="127.0.0.1")

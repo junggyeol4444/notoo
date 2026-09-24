@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -37,7 +40,24 @@ class Settings(BaseSettings):
     # "sqlite": 파이썬 내 코사인 유사도 (의존성 없음)
     # "pgvector": PostgreSQL pgvector 확장 사용
     vector_backend: str = "sqlite"
-    embedding_dim: int = 768
+
+    # --- 장편 기억 검색 (기획안 41번) ---------------------------------------
+    # 과거 장면을 찾아 Writer Context에 발췌로 넣는다.
+    #   auto       임베딩 모델이 설정돼 있으면 의미 검색, 아니면 어휘 검색
+    #   embedding  의미 검색만 (임베딩 설정이 없거나 실패하면 검색하지 않는다)
+    #   lexical    어휘 검색만 (모델 없이 글자 조각이 겹치는 장면을 찾는다)
+    #   off        검색하지 않는다
+    memory_search: Literal["auto", "embedding", "lexical", "off"] = "auto"
+    # 로컬 서버의 /v1/embeddings. 주소를 비우면 NF_LLM_BASE_URL을 쓴다.
+    embedding_base_url: str = ""
+    embedding_model: str = ""
+    embedding_api_key: str = ""
+    embedding_batch_size: int = 32
+    # 한 번에 Writer에게 보여 줄 과거 장면 수와 장면당 발췌 길이(글자)
+    memory_top_k: int = 4
+    memory_excerpt_chars: int = 500
+    # 장면을 이 길이(글자) 안팎의 조각으로 나눠 색인한다
+    memory_chunk_chars: int = 800
 
     # --- LLM ------------------------------------------------------------
     # 로컬 OpenAI 호환 엔드포인트를 가리킨다.
@@ -95,6 +115,15 @@ class Settings(BaseSettings):
         ]
     )
 
+    # --- 자동 집필 스케줄러 (기획안 42번) ------------------------------------
+    # API 서버 안에서 매일 정해진 시각에 돈다. 작품마다 켜야 쓰기 시작한다
+    # (PUT /novels/{slug}/schedule). 서버를 여러 워커로 띄우면 워커마다 돈다.
+    # 같은 날 같은 작품은 한 번만 쓰도록 막지만, 워커는 하나로 띄우는 것이 안전하다.
+    scheduler_enabled: bool = True
+    scheduler_time: str = "03:00"
+    # IANA 시간대 이름 (예: Asia/Seoul). 비우면 서버의 로컬 시간.
+    scheduler_timezone: str = ""
+
     # --- 분석 파라미터 ----------------------------------------------------
     # 회차 구분 마커를 못 찾았을 때 강제 분할할 기준 글자 수
     fallback_episode_chars: int = 5000
@@ -102,6 +131,28 @@ class Settings(BaseSettings):
     cliffhanger_tail_chars: int = 400
     # 대형 사건으로 볼 사건 강도 상위 백분위
     major_event_percentile: float = 0.85
+
+    @field_validator("scheduler_time")
+    @classmethod
+    def _check_time(cls, value: str) -> str:
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})", value.strip())
+        if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+            raise ValueError(f"NF_SCHEDULER_TIME은 HH:MM 형식이어야 합니다: {value!r}")
+        return f"{int(m.group(1)):02d}:{m.group(2)}"
+
+    @field_validator("scheduler_timezone")
+    @classmethod
+    def _check_timezone(cls, value: str) -> str:
+        value = value.strip()
+        if value:
+            try:
+                ZoneInfo(value)
+            except (ZoneInfoNotFoundError, ValueError) as exc:
+                raise ValueError(
+                    f"알 수 없는 시간대입니다: {value!r}. "
+                    "Windows라면 'pip install tzdata'가 필요할 수 있습니다."
+                ) from exc
+        return value
 
     @property
     def uploads_dir(self) -> Path:

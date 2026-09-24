@@ -35,6 +35,7 @@ from novel_factory.generation.prompts import (
 )
 from novel_factory.generation.structured import strip_reasoning
 from novel_factory.llm.base import LLMProvider, Message
+from novel_factory.memory.retrieval import plan_query
 from novel_factory.reference.similarity import FingerprintIndex, check_text
 from novel_factory.text.normalize import normalize_text
 from novel_factory.text.tokens import syllables
@@ -190,6 +191,7 @@ def write_episode(
         output_tokens=output_tokens_for(biggest_scene, cfg),
         extra_prompt_chars=len(str(plan)) + len(str(scenes[0])) + cfg.writer_tail_chars,
         character_codes=list(plan.get("characters") or []) or None,
+        query=plan_query(plan),
     )
 
     drafts: list[SceneDraft] = []

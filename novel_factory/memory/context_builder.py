@@ -57,6 +57,8 @@ class WriterContext:
     recent_summaries: list[dict[str, object]] = field(default_factory=list)
     style_bible: dict[str, object] = field(default_factory=dict)
     reference_patterns: list[dict[str, object]] = field(default_factory=list)
+    # 기억 검색으로 찾은 앞 회차 장면 발췌 (기획안 41번, memory/retrieval.py)
+    related_scenes: list[dict[str, object]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -72,6 +74,7 @@ class WriterContext:
             "recent_summaries": self.recent_summaries,
             "style_bible": self.style_bible,
             "reference_patterns": self.reference_patterns,
+            "related_scenes": self.related_scenes,
         }
 
     def to_prompt(self) -> str:
@@ -157,6 +160,17 @@ class WriterContext:
             for e in self.recent_summaries:
                 lines.append(f"- {e.get('number')}화: {e.get('summary')}")
             lines.append("")
+
+        if self.related_scenes:
+            lines.append(
+                "# 관련된 과거 장면 (앞 회차 원고 발췌. 설정과 사건을 확인하는 용도다. "
+                "문장을 그대로 옮기지 않는다)"
+            )
+            for r in self.related_scenes:
+                head = f"[{r.get('episode_number')}화 {r.get('title') or ''}".rstrip()
+                lines.append(head + "]")
+                lines.append(str(r.get("excerpt") or ""))
+                lines.append("")
 
         if self.style_bible:
             sb = self.style_bible

@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from typing import ClassVar
 
 from novel_factory.generation.prompts import (
     ARC_SYSTEM,
@@ -343,3 +344,49 @@ class ScriptedNovelist(LLMProvider):
 
     def _unknown(self, user: str, messages: list[Message], is_retry: bool) -> str:
         return "무슨 요청인지 모르겠습니다."
+
+
+class FakeEmbedder:
+    """결정적인 가짜 임베더.
+
+    음절 2-gram을 해시해 벡터로 만든다. 단, SYNONYMS에 있는 낱말은 같은 개념
+    토큰으로 바꾼 뒤에 만든다. 그래서 '협약'으로 찾으면 '계약'이 든 장면이 걸린다.
+    어휘 검색은 이걸 못 한다. 테스트가 의미 검색 경로를 실제로 탔는지 가르는 데 쓴다.
+    """
+
+    SYNONYMS: ClassVar[dict[str, str]] = {
+        "계약": "개념가",
+        "협약": "개념가",
+        "약정": "개념가",
+    }
+    DIM = 64
+
+    def __init__(self, model: str = "fake-embed") -> None:
+        self.model = model
+        self.calls = 0
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        import hashlib
+        import math
+
+        self.calls += 1
+        out = []
+        for text in texts:
+            for word, concept in self.SYNONYMS.items():
+                text = text.replace(word, concept)
+            vec = [0.0] * self.DIM
+            for word in re.findall(r"[가-힣A-Za-z0-9]+", text):
+                grams = (
+                    [word]
+                    if len(word) == 1
+                    else [word[i : i + 2] for i in range(len(word) - 1)]
+                )
+                for g in grams:
+                    h = int(hashlib.md5(g.encode()).hexdigest(), 16)
+                    vec[h % self.DIM] += 1.0
+            norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+            out.append([v / norm for v in vec])
+        return out
+
+    def close(self) -> None:
+        pass

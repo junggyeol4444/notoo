@@ -2,8 +2,8 @@
 
     uvicorn novel_factory.app.main:app --reload
 
-Phase 1(참고작 분석), Phase 2(장기기억 DB), Phase 3(집필)이 여기 붙어 있다.
-품질 검사(Continuity/Logic/Style), EPUB, 출판은 아직 없다.
+Phase 1(참고작 분석), Phase 2(장기기억 DB), Phase 3(집필), 품질 검사,
+장편 기억 검색, 자동 집필 스케줄러가 여기 붙어 있다. EPUB, 출판은 아직 없다.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from novel_factory.app.routers import novels, references, writing
+from novel_factory.app.routers import memory, novels, references, schedule, writing
 from novel_factory.app.schemas import HealthOut
 from novel_factory.config import get_settings
 from novel_factory.database.base import create_all
@@ -30,6 +30,7 @@ from novel_factory.errors import (
 )
 from novel_factory.llm import get_provider
 from novel_factory.reference.parser import SUPPORTED_EXTENSIONS
+from novel_factory.scheduler.service import get_scheduler
 
 logger = logging.getLogger("novel_factory")
 
@@ -40,6 +41,9 @@ DESCRIPTION = """
 - Phase 1: 참고소설 분석 (TXT/Markdown/EPUB/DOCX/PDF/HWP/HWPX → Reference Profile)
 - Phase 2: 장기기억 DB (Novel Bible, 인물, 지식, 관계, 세계관, 시간선, 복선)
 - Phase 3: 집필 (사건 일정 → Arc → 회차 계획 → 장면 설계 → 장면 단위 집필 → 기억 갱신)
+- 품질 검사와 자동 수정 (Continuity, Logic, Similarity, Style, Hook, Reader)
+- 장편 기억 검색 (앞 회차 장면 의미/어휘 검색)
+- 자동 집필 스케줄러 (서버 내장, 매일 정해진 시각)
 
 원칙
 - 참고작 원문은 저장하지 않는다. 구조 수치와 복원 불가능한 해시 지문만 남긴다.
@@ -59,7 +63,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "LLM 미설정. 참고작 분석과 장기기억 DB는 그대로 동작합니다. "
             "집필 기능을 쓰려면 NF_LLM_BASE_URL과 NF_LLM_MODEL을 지정하세요."
         )
-    yield
+    scheduler = get_scheduler()
+    if settings.scheduler_enabled:
+        scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.stop()
 
 
 app = FastAPI(
@@ -72,6 +82,8 @@ app = FastAPI(
 app.include_router(references.router)
 app.include_router(novels.router)
 app.include_router(writing.router)
+app.include_router(memory.router)
+app.include_router(schedule.router)
 
 
 @app.exception_handler(NotFoundError)

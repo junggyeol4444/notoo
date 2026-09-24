@@ -26,6 +26,7 @@ from novel_factory.generation.prompts import LOGIC_SYSTEM, build_logic_prompt
 from novel_factory.generation.schemas import LogicOut
 from novel_factory.generation.structured import StructuredOutputError, request_structured
 from novel_factory.llm.base import LLMProvider, Message
+from novel_factory.memory.retrieval import plan_query
 from novel_factory.quality.report import (
     CheckResult,
     Issue,
@@ -92,6 +93,7 @@ def check_logic(
         cfg,
         output_tokens=LOGIC_OUTPUT_TOKENS,
         extra_prompt_chars=len(text) + len(str(plan)),
+        query=plan_query(plan),
     )
     prompt = build_logic_prompt(
         block,

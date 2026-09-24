@@ -25,6 +25,7 @@ from novel_factory.generation.prompts import SCENE_SYSTEM, build_scene_prompt
 from novel_factory.generation.schemas import ScenePlanOut
 from novel_factory.generation.structured import request_structured
 from novel_factory.llm.base import LLMProvider, Message
+from novel_factory.memory.retrieval import plan_query
 
 ROLE_DESCRIPTIONS: dict[str, str] = {
     "도입": "도입 — 상황과 인물을 세운다",
@@ -160,6 +161,7 @@ def plan_scenes(
         output_tokens=SCENE_OUTPUT_TOKENS,
         extra_prompt_chars=len(str(plan)),
         character_codes=cast_codes or None,
+        query=plan_query(plan),
     )
     prompt = build_scene_prompt(
         block,

@@ -18,8 +18,12 @@ from fastapi import FastAPI, Request
 from novel_factory.llm.base import Message
 
 
-def build_app(novelist, *, fail_first: int = 0) -> FastAPI:
-    """fail_first만큼 첫 요청을 503으로 돌려 재시도 경로를 태운다."""
+def build_app(novelist, *, fail_first: int = 0, embedder=None) -> FastAPI:
+    """fail_first만큼 첫 요청을 503으로 돌려 재시도 경로를 태운다.
+
+    embedder를 주면 /v1/embeddings도 연다. 응답 순서는 일부러 뒤집어서, 클라이언트가
+    index로 다시 정렬하는지 확인한다.
+    """
     app = FastAPI()
     state = {"failures_left": fail_first, "requests": []}
     app.state.fake = state
@@ -27,6 +31,22 @@ def build_app(novelist, *, fail_first: int = 0) -> FastAPI:
     @app.get("/v1/models")
     def models() -> dict[str, object]:
         return {"object": "list", "data": [{"id": "fake-novelist", "object": "model"}]}
+
+    @app.post("/v1/embeddings")
+    async def embeddings(request: Request):
+        body = await request.json()
+        state["requests"].append(body)
+        if embedder is None:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse({"error": "no embedding model"}, status_code=404)
+        inputs = body["input"] if isinstance(body["input"], list) else [body["input"]]
+        vectors = embedder.embed(inputs)
+        data = [
+            {"object": "embedding", "index": i, "embedding": v}
+            for i, v in enumerate(vectors)
+        ]
+        return {"object": "list", "model": body.get("model"), "data": data[::-1]}
 
     @app.post("/v1/chat/completions")
     async def chat(request: Request):

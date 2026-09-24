@@ -21,9 +21,12 @@ from novel_factory.database.models import MemoryChunk
 
 
 class Embedder(Protocol):
-    """문장을 벡터로 바꾸는 무엇."""
+    """문장을 벡터로 바꾸는 무엇. model은 벡터를 만든 모델의 이름이다.
 
-    dimension: int
+    차원은 모델마다 다르므로 조각마다 model을 적어 두고 같은 모델끼리만 비교한다.
+    """
+
+    model: str
 
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 

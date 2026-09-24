@@ -49,6 +49,7 @@ from novel_factory.generation.scene_planner import plan_scenes
 from novel_factory.generation.storage import save_episode_files
 from novel_factory.generation.writer import write_episode
 from novel_factory.llm.base import LLMProvider
+from novel_factory.memory.retrieval import SCENE, index_episode
 from novel_factory.quality.runner import check_and_fix
 from novel_factory.reference.similarity import FingerprintIndex
 
@@ -61,6 +62,8 @@ class EpisodeGenerationResult:
     warnings: list[str] = field(default_factory=list)
     memory: dict[str, object] = field(default_factory=dict)
     quality: dict[str, object] = field(default_factory=dict)
+    #: 품질 FAIL로 기억 갱신을 보류했다 (hold_on_fail)
+    held: bool = False
 
     def as_dict(self) -> dict[str, object]:
         ep = self.episode
@@ -77,6 +80,7 @@ class EpisodeGenerationResult:
             "memory": self.memory,
             "similarity": (ep.quality_reports or {}).get("similarity"),
             "quality": self.quality,
+            "held": self.held,
         }
 
 
@@ -166,7 +170,7 @@ def rollback_episode_memory(session: Session, novel: Novel, number: int) -> list
         delete(MemoryChunk).where(
             MemoryChunk.novel_id == novel.id,
             MemoryChunk.episode_number == number,
-            MemoryChunk.kind == "summary",
+            MemoryChunk.kind.in_(("summary", SCENE)),
         )
     )
     session.flush()
@@ -182,8 +186,15 @@ def generate_episode(
     settings: Settings | None = None,
     replace: bool = False,
     save_files: bool = True,
+    hold_on_fail: bool = False,
 ) -> EpisodeGenerationResult:
-    """한 회차를 계획부터 기억 갱신까지 끝낸다."""
+    """한 회차를 계획부터 기억 갱신까지 끝낸다.
+
+    hold_on_fail=True면 고친 뒤에도 품질 FAIL이 남았을 때 기억 갱신을 하지 않고
+    status를 "held"로 둔다. 사람이 확인한 뒤 /memory로 확정하거나 다시 만든다.
+    자동 집필 스케줄러가 이렇게 부른다. 틀린 원고의 사실이 장기기억에 들어가면
+    뒤 회차 전부로 퍼지기 때문이다.
+    """
     cfg = settings or get_settings()
     if not provider.available:
         raise NovelFactoryError(LLM_UNAVAILABLE_MESSAGE)
@@ -244,10 +255,27 @@ def generate_episode(
         warnings.append(
             "품질 검사: 고친 뒤에도 FAIL이 남았습니다.\n" + quality.report.summary()
         )
+        if hold_on_fail:
+            planned.episode.status = "held"
+            folder = save_episode_files(novel, planned.episode, cfg) if save_files else None
+            session.flush()
+            return EpisodeGenerationResult(
+                episode=planned.episode,
+                folder=folder,
+                timings=timings,
+                warnings=warnings,
+                quality=quality.as_dict(),
+                held=True,
+            )
 
     started = time.perf_counter()
     delta = extract_memory(session, novel, planned.episode, provider, settings=cfg)
     applied = apply_memory(session, novel, planned.episode, delta)
+    # 다음 회차부터 이 회차의 장면을 검색할 수 있게 색인한다 (기획안 41번).
+    warnings.extend(
+        f"기억 색인: {w}"
+        for w in index_episode(session, novel, planned.episode, settings=cfg)
+    )
     timings["memory"] = time.perf_counter() - started
     warnings.extend(f"기억 갱신: {r}" for r in applied.rejected)
 

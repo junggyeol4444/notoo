@@ -7,6 +7,7 @@ Writer Context가 모델의 컨텍스트 길이를 넘으면 뒤쪽이 잘리거
 곱해서 센다. 쓰는 모델의 토크나이저로 실측해서 이 값을 맞추면 정확해진다.
 
 줄이는 순서 (먼저 버리는 것부터)
+  0. 관련된 과거 장면 발췌    점수 높은 1개는 남긴다
   1. 오래된 회차 요약        최근 2개는 남긴다
   2. 중요도 낮은 시간선 사건  중요도 4 이상과 최근 5개는 남긴다
   3. 세계관 항목              이번 화 계획에 이름이 나오는 것은 남긴다
@@ -32,6 +33,8 @@ class BudgetReport:
     budget_tokens: int
     estimated_tokens: int
     trimmed: list[str] = field(default_factory=list)
+    # 기억 검색 결과 요약 (prepare_context가 채운다)
+    memory_search: dict[str, object] = field(default_factory=dict)
 
     @property
     def fits(self) -> bool:
@@ -43,6 +46,7 @@ class BudgetReport:
             "estimated_tokens": self.estimated_tokens,
             "fits": self.fits,
             "trimmed": self.trimmed,
+            "memory_search": self.memory_search,
         }
 
 
@@ -61,11 +65,16 @@ def fit_context(
         timeline=list(ctx.timeline),
         world=list(ctx.world),
         reference_patterns=list(ctx.reference_patterns),
+        related_scenes=list(ctx.related_scenes),
     )
     trimmed: list[str] = []
 
     def size() -> int:
         return estimate_tokens(current.to_prompt(), tokens_per_char)
+
+    while size() > budget_tokens and len(current.related_scenes) > 1:
+        dropped = current.related_scenes.pop()  # 점수 순이라 끝이 가장 낮다
+        trimmed.append(f"과거 장면 {dropped.get('episode_number')}화")
 
     while size() > budget_tokens and len(current.recent_summaries) > 2:
         dropped = current.recent_summaries.pop(0)

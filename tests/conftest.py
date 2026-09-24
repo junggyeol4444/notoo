@@ -33,13 +33,20 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("NF_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("NF_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("NF_LLM_MODEL", raising=False)
+    monkeypatch.delenv("NF_EMBEDDING_MODEL", raising=False)
+    # 테스트 중에 예약 실행 스레드가 뜨지 않게 한다. 수동 실행은 그대로 된다.
+    monkeypatch.setenv("NF_SCHEDULER_ENABLED", "false")
     get_settings.cache_clear()
+    from novel_factory.scheduler.service import reset_scheduler
+
+    reset_scheduler()
 
     from novel_factory.database.base import reset_engine
 
     reset_engine()
     cfg = get_settings()
     yield cfg
+    reset_scheduler()
     reset_engine()
     get_settings.cache_clear()
 

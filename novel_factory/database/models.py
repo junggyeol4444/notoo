@@ -158,7 +158,8 @@ class Episode(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200), default="")
 
     status: Mapped[str] = mapped_column(String(20), default="planned")
-    # planned -> outlined -> drafted -> checked -> final
+    # planned -> outlined -> drafted -> final
+    # held: 품질 검사 FAIL이 남아 기억 갱신을 보류한 회차 (자동 집필 스케줄러)
 
     outline: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     scenes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
