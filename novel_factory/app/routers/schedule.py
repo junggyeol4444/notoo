@@ -29,6 +29,7 @@ router = APIRouter(tags=["scheduler"])
 class ScheduleIn(BaseModel):
     enabled: bool | None = None
     episodes_per_run: int | None = Field(default=None, ge=1, le=jobs.MAX_EPISODES_PER_RUN)
+    continuous: bool | None = None
 
 
 def _started(started: bool, wait: bool) -> JSONResponse:
@@ -64,7 +65,10 @@ def update_novel_schedule(
     body: ScheduleIn, novel: Novel = Depends(get_novel), db: Session = Depends(get_db)
 ) -> dict[str, object]:
     jobs.update_schedule(
-        novel, enabled=body.enabled, episodes_per_run=body.episodes_per_run
+        novel,
+        enabled=body.enabled,
+        episodes_per_run=body.episodes_per_run,
+        continuous=body.continuous,
     )
     db.flush()
     return jobs.novel_status(db, novel)

@@ -62,14 +62,12 @@ from novel_factory.database.repositories import (
     TimelineRepository,
     WorldRepository,
 )
+from novel_factory.generation.genesis import UNTITLED
 from novel_factory.memory import build_context
 from novel_factory.reference.pattern import aggregate_profiles, derive_patterns
 from novel_factory.reference.profile import ReferenceProfile
 
 router = APIRouter(prefix="/novels", tags=["novels"])
-
-#: 제목 없이 만든 작품의 임시 제목. 작품 설계(genesis)가 이 제목이면 새로 짓는다.
-UNTITLED = "제목 미정"
 
 
 @router.post("", response_model=NovelOut, status_code=status.HTTP_201_CREATED)
@@ -377,6 +375,8 @@ def list_timeline(
             "title": e.title,
             "episode_number": e.episode_number,
             "importance": e.importance,
+            "participants": list(e.participants or []),
+            "location": e.location,
         }
         for e in events
     ]

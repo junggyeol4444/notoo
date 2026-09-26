@@ -7,6 +7,9 @@
     novel-factory plan-story hoegwi               사건 일정 + Arc 설계
     novel-factory write hoegwi 1 --to 30          1~30화 연속 생성 (LLM 필요)
     novel-factory check hoegwi 3                  3화 품질 검사 (LLM 없으면 규칙 검사만)
+    novel-factory create --file 요청.txt          요청 글로 작품을 만들고 집필 예약
+    novel-factory create "현대판타지 ... 250화" --write
+                                                  만든 뒤 멈출 때까지 바로 쓴다
     novel-factory run-schedule                    자동 집필이 켜진 작품을 지금 쓴다
     novel-factory run-schedule hoegwi             이 작품만 지금 쓴다 (꺼져 있어도)
     novel-factory serve                           API 서버 실행
@@ -194,6 +197,58 @@ def _cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_create(args: argparse.Namespace) -> int:
+    """기획안 57번: 요청 글 하나로 작품을 만든다."""
+    from novel_factory.database import create_all, session_scope
+    from novel_factory.llm import get_provider
+    from novel_factory.orchestrator.project import ProjectOptions, start_project
+    from novel_factory.orchestrator.request import parse_request
+    from novel_factory.scheduler import jobs
+
+    text = Path(args.file).read_text(encoding="utf-8") if args.file else args.text
+    if not text.strip():
+        print("요청 글을 주세요 (인자 또는 --file).", file=sys.stderr)
+        return 2
+    create_all()
+    provider = get_provider()
+    if not provider.available:
+        print(
+            "LLM에 연결할 수 없습니다. NF_LLM_BASE_URL / NF_LLM_MODEL을 확인하세요.",
+            file=sys.stderr,
+        )
+        return 3
+    request = parse_request(text, provider)
+    print(
+        f"장르 {request.genre} / {request.episodes}화 / "
+        f"회차당 {request.chars_per_episode}자"
+    )
+    for ref in request.references:
+        print(f"   참고 {ref.name}: {', '.join(ref.aspects) if ref.aspects else '전부'}")
+    for w in request.warnings:
+        print(f"   [경고] {w}")
+    with session_scope() as session:
+        result = start_project(
+            session,
+            request,
+            provider,
+            options=ProjectOptions(
+                publishing_mode=args.publishing_mode,
+                episodes_per_run=args.per_run,
+                continuous=args.write,
+            ),
+            slug=args.slug,
+        )
+        novel_id = result.novel.id
+        print(f"작품 '{result.novel.title}' ({result.novel.slug})")
+        for step in result.steps:
+            print(f"   {step['step']}: {step['status']}")
+    if args.write:
+        run = jobs.run_novel(novel_id, provider=provider, require_enabled=False)
+        print(f"쓴 회차: {len(run.written)}개. {run.paused or run.error or ''}")
+        return 1 if run.error else 0
+    return 0
+
+
 def _cmd_run_schedule(args: argparse.Namespace) -> int:
     """서버 없이 스케줄러 작업을 한 번 돌린다. OS 작업 스케줄러에 걸어도 된다."""
     from novel_factory.database import create_all, session_scope
@@ -289,6 +344,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--reader", action="store_true", help="Reader Simulation도 돌린다 (LLM 필요)"
     )
     check.set_defaults(func=_cmd_check)
+
+    create = sub.add_parser(
+        "create", help="요청 글로 작품을 만든다 (기획안 57번, LLM 필요)"
+    )
+    create.add_argument("text", nargs="?", default="", help="요청 글")
+    create.add_argument("--file", default="", help="요청 글 파일")
+    create.add_argument("--slug", default="")
+    create.add_argument(
+        "--per-run", type=int, default=1, help="예약 실행 한 번에 쓸 회차 수"
+    )
+    create.add_argument(
+        "--publishing-mode", choices=("manual", "automatic"), default="automatic"
+    )
+    create.add_argument(
+        "--write",
+        action="store_true",
+        help="만든 뒤 멈출 때까지 바로 쓴다 (며칠 걸릴 수 있다)",
+    )
+    create.set_defaults(func=_cmd_create)
 
     run = sub.add_parser("run-schedule", help="자동 집필 작업을 지금 한 번 돌린다")
     run.add_argument(

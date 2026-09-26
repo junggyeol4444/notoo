@@ -1,20 +1,19 @@
 """참고소설 API (기획안 53번).
 
-POST /references                        등록
+POST /references                        등록 (서버에 있는 파일 경로로)
+POST /references/upload                 등록 (파일 업로드, 기획안 49번 화면)
 POST /references/{id}/analyze           분석
 GET  /references                        목록
 GET  /references/{id}                   Profile
-GET  /references/{id}/report            사람용 요약
 POST /references/aggregate              다중 집계 → GenreProfile + 패턴
 POST /references/similarity             유사도 검사
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from novel_factory.app.deps import get_db, settings_dep
@@ -36,8 +35,8 @@ from novel_factory.reference.pattern import (
     aggregate_profiles,
     derive_patterns,
 )
-from novel_factory.reference.pipeline import analyze_file
 from novel_factory.reference.profile import ReferenceProfile
+from novel_factory.reference.service import analyze_reference_record
 from novel_factory.reference.similarity import check_text
 
 router = APIRouter(prefix="/references", tags=["references"])
@@ -115,7 +114,8 @@ def create_reference(
 @router.post("/upload", response_model=ReferenceOut, status_code=status.HTTP_201_CREATED)
 async def upload_reference(
     file: UploadFile = File(...),
-    genre: str = "",
+    genre: str = Form(default=""),
+    title: str = Form(default=""),
     db: Session = Depends(get_db),
     settings: Settings = Depends(settings_dep),
 ) -> ReferenceOut:
@@ -134,7 +134,7 @@ async def upload_reference(
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
     except NovelFactoryError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
-    return _to_out(_persist(db, imported, title="", author="", genre=genre))
+    return _to_out(_persist(db, imported, title=title, author="", genre=genre))
 
 
 @router.get("", response_model=list[ReferenceOut])
@@ -158,7 +158,7 @@ def analyze_reference(
 ) -> ReferenceProfileOut:
     """참고소설을 분석해 Reference Profile을 만든다.
 
-    회차 수가 많으면 몇 초 걸린다. 운영에서는 Celery로 넘기고 202를
+    회차 수가 많으면 몇 초 걸린다. 운영에서는 백그라운드로 넘기고 202를
     돌려주는 게 맞지만, 지금은 동기로 처리한다.
     """
     options = body or ReferenceAnalyzeRequest()
@@ -169,37 +169,17 @@ def analyze_reference(
             status.HTTP_404_NOT_FOUND, f"참고소설 '{reference_id}'이 없습니다."
         )
 
-    ref.status = "analyzing"
-    db.flush()
-
     try:
-        result = analyze_file(
-            ref.stored_path,
-            reference_id=reference_id,
-            title=ref.title,
-            genre=options.genre or ref.genre,
+        analyze_reference_record(
+            db,
+            ref,
+            genre=options.genre,
             fallback_chars=options.fallback_chars,
             major_quantile=options.major_quantile,
-            with_fingerprint=options.store_fingerprints,
+            store_fingerprints=options.store_fingerprints,
         )
     except NovelFactoryError as exc:
-        ref.status = "failed"
-        ref.warnings = [str(exc)]
-        db.flush()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
-
-    profile: ReferenceProfile = result.profile
-    if options.genre:
-        ref.genre = options.genre
-    repo.save_profile(
-        ref,
-        profile.as_dict(),
-        episode_count=profile.basic.episode_count if profile.basic else 0,
-        warnings=profile.warnings,
-    )
-    if options.store_fingerprints:
-        repo.save_fingerprints(ref, result.metrics)
-    ref.analyzed_at = datetime.now(UTC)
 
     return ReferenceProfileOut(
         reference_id=reference_id,

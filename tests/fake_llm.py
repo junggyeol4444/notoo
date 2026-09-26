@@ -28,9 +28,11 @@ from novel_factory.generation.prompts import (
     COMPLETION_SYSTEM,
     COVER_SYSTEM,
     EPISODE_SYSTEM,
+    GENESIS_SYSTEM,
     LOGIC_SYSTEM,
     MEMORY_SYSTEM,
     READER_SYSTEM,
+    REQUEST_SYSTEM,
     SCENE_SYSTEM,
     WRITER_SYSTEM,
 )
@@ -65,6 +67,8 @@ def _stage(messages: list[Message]) -> str:
         ("cover", COVER_SYSTEM),
         ("blurb", BLURB_SYSTEM),
         ("completion", COMPLETION_SYSTEM),
+        ("genesis", GENESIS_SYSTEM),
+        ("request", REQUEST_SYSTEM),
     ):
         if system == prompt:
             return name
@@ -104,7 +108,9 @@ class ScriptedNovelist(LLMProvider):
         logic_flag: str | None = None,
         fix_text: str | None = None,
         completion_problems: bool = False,
+        resolve_foreshadowing: bool = False,
     ) -> None:
+        self.resolve_foreshadowing = resolve_foreshadowing
         self.completion_problems = completion_problems
         self.messy = messy
         self.plant = plant
@@ -293,8 +299,9 @@ class ScriptedNovelist(LLMProvider):
             "items": [{"character": codes[0], "item": "검은 봉투"}] if codes else [],
             "deaths": [],
             "new_foreshadowings": [],
-            "advanced_foreshadowings": fs[:1],
-            "resolved_foreshadowings": ["F999"],
+            "advanced_foreshadowings": [] if self.resolve_foreshadowing else fs[:1],
+            "resolved_foreshadowings": (fs if self.resolve_foreshadowing else [])
+            + ["F999"],
             "hook_type": hook.group(1) if hook else "",
         }
         return _wrap(delta)
@@ -396,6 +403,60 @@ class ScriptedNovelist(LLMProvider):
                 ],
                 "ending_consistent": False,
                 "ending_issues": ["계획한 결말은 복수 완성인데 화해로 끝남"],
+            }
+        )
+
+    def _genesis(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        if self._messy_first(is_retry):
+            return _wrap({"logline": "짧음"})  # 필수 항목이 빠진 첫 답
+        planned = int(re.search(r"# 분량\n(\d+)화", user).group(1))  # type: ignore[union-attr]
+        return _wrap(
+            {
+                "title": "두 번째 인수합병",
+                "logline": "죽은 인수합병가가 회귀해 다시 판을 짠다.",
+                "premise": "회귀와 기업 인수",
+                "mood": "긴장감 있는 기업물",
+                "main_conflict": "대성그룹과의 인수 전쟁",
+                "ending": "대성그룹을 인수하고 복수를 끝낸다",
+                "target_reader": "20~40대",
+                "characters": [
+                    {
+                        "name": "김도윤",
+                        "role": "주인공",
+                        "age": "34세",
+                        "job": "인수합병가",
+                        "personality": "냉정함",
+                        "first_episode": 5,
+                    },
+                    {"name": "박서연", "role": "주요조연", "job": "회계사"},
+                    {"name": "최민석", "role": "비서", "first_episode": 1},  # 없는 역할
+                    {"name": "강태호", "role": "적대자", "first_episode": planned + 50},
+                    {"name": "김도윤", "role": "조연"},  # 이름 겹침
+                ],
+                "world": [
+                    {"category": "회사", "name": "대성그룹", "description": "재계 1위"}
+                ],
+                "foreshadowings": [
+                    {
+                        "description": "검은 봉투",
+                        "setup_episode": 1,
+                        "planned_payoff": planned + 99,
+                    },
+                    {"description": "사라진 장부", "setup_episode": 2},
+                ],
+                "style": {"forbidden": ["피식 웃었다"], "preferred": "짧은 문단"},
+            }
+        )
+
+    def _request(self, user: str, messages: list[Message], is_retry: bool) -> str:
+        return _wrap(
+            {
+                "genre": "무협",
+                "title": "",
+                "episodes": 30,
+                "chars_per_episode": 4000,
+                "references": [{"name": "REF_A", "aspects": ["pacing", "날씨"]}],
+                "notes": "",
             }
         )
 

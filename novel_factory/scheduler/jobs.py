@@ -52,6 +52,8 @@ logger = logging.getLogger("novel_factory.scheduler")
 DEFAULT_SCHEDULE: dict[str, object] = {
     "enabled": False,
     "episodes_per_run": 1,
+    # True면 한 번 돌 때 멈출 이유(목표 회차, FAIL, 오류)가 생길 때까지 계속 쓴다
+    "continuous": False,
     "paused": False,
     "pause_reason": "",
 }
@@ -78,10 +80,13 @@ def update_schedule(
     *,
     enabled: bool | None = None,
     episodes_per_run: int | None = None,
+    continuous: bool | None = None,
 ) -> dict[str, object]:
     schedule = get_schedule(novel)
     if enabled is not None:
         schedule["enabled"] = enabled
+    if continuous is not None:
+        schedule["continuous"] = continuous
     if episodes_per_run is not None:
         if not 1 <= episodes_per_run <= MAX_EPISODES_PER_RUN:
             raise NovelFactoryError(
@@ -234,6 +239,11 @@ def _run_novel(
             _save_schedule(novel, schedule)
             session.commit()
         per_run = int(schedule["episodes_per_run"])  # type: ignore[call-overload]
+        if schedule.get("continuous"):
+            # 남은 회차 + 1 (마지막 한 번은 완결 검사로 끝난다)
+            per_run = max(
+                novel.planned_episodes - next_episode_number(session, novel) + 2, 1
+            )
 
     llm = provider or get_provider(cfg)
     if not llm.available:

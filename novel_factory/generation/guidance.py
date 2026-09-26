@@ -63,6 +63,14 @@ class GenreGuidance:
     foreshadow_span: tuple[float, float] = DEFAULT_FORESHADOW_SPAN
     dialogue_ratio: float = DEFAULT_DIALOGUE_RATIO
     pattern_instructions: list[str] = field(default_factory=list)
+    # 캐릭터 구조 (참고 항목 character_structure). 참고작이 없으면 None이고,
+    # 그때는 작품 설계 LLM이 정한다 (정해 둔 기본값이 없다).
+    supporting_count: int | None = None
+    antagonist_count: int | None = None
+    character_intro_interval: float | None = None
+    # 문체 (참고 항목 style). None이면 Style Bible 기본값을 쓴다.
+    sentence_chars: float | None = None
+    paragraph_chars: float | None = None
 
     def __post_init__(self) -> None:
         if not self.cliffhanger_distribution:
@@ -83,6 +91,11 @@ class GenreGuidance:
             "major_interval": [round(x, 2) for x in self.major_interval],
             "foreshadow_span": [round(x, 2) for x in self.foreshadow_span],
             "dialogue_ratio": round(self.dialogue_ratio, 4),
+            "supporting_count": self.supporting_count,
+            "antagonist_count": self.antagonist_count,
+            "character_intro_interval": self.character_intro_interval,
+            "sentence_chars": self.sentence_chars,
+            "paragraph_chars": self.paragraph_chars,
         }
 
 
@@ -152,6 +165,19 @@ def load_guidance(session: Session, novel: Novel) -> GenreGuidance:
         )
     if "dialogue_ratio" in genre.metrics:
         guidance.dialogue_ratio = genre.metrics["dialogue_ratio"].weighted_mean
+    m = genre.metrics
+    if "supporting_count" in m:
+        guidance.supporting_count = max(1, round(m["supporting_count"].weighted_mean))
+    if "antagonist_count" in m:
+        guidance.antagonist_count = max(0, round(m["antagonist_count"].weighted_mean))
+    if "character_intro_interval" in m:
+        guidance.character_intro_interval = max(
+            1.0, m["character_intro_interval"].weighted_mean
+        )
+    if "avg_sentence_length" in m:
+        guidance.sentence_chars = m["avg_sentence_length"].weighted_mean
+    if "avg_paragraph_length" in m:
+        guidance.paragraph_chars = m["avg_paragraph_length"].weighted_mean
 
     from novel_factory.reference.pattern import derive_patterns
 

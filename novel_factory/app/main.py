@@ -11,13 +11,17 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from novel_factory.app.routers import (
+    browse,
     memory,
     novels,
+    projects,
     publishing,
     references,
     schedule,
@@ -92,6 +96,12 @@ app.include_router(writing.router)
 app.include_router(memory.router)
 app.include_router(schedule.router)
 app.include_router(publishing.router)
+app.include_router(projects.router)
+app.include_router(browse.router)
+
+# 관리자 화면 (기획안 48~50번). 빌드 도구 없는 정적 파일이다.
+ADMIN_DIR = Path(__file__).parent / "static" / "admin"
+app.mount("/admin", StaticFiles(directory=ADMIN_DIR, html=True), name="admin")
 
 
 @app.exception_handler(NotFoundError)

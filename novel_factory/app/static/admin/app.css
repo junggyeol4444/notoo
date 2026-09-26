@@ -1,0 +1,70 @@
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #677083;
+  --line: #dde1e8; --accent: #3056d3; --accent-text: #ffffff;
+  --pass: #1f8a4c; --warn: #b7791f; --fail: #c53030; --skip: #718096;
+  --code: #eef1f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171d; --panel: #1c2028; --text: #e4e7ec; --muted: #9aa3b2;
+    --line: #2d333f; --accent: #6d8cff; --accent-text: #0e1117;
+    --pass: #48bb78; --warn: #ecc94b; --fail: #fc8181; --skip: #a0aec0;
+    --code: #252a35;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.6 system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; }
+a { color: var(--accent); }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; text-decoration: none; color: var(--text); }
+.main-nav { display: flex; flex-wrap: wrap; gap: 4px; }
+.main-nav a, .tabs a { padding: 4px 10px; border-radius: 6px; text-decoration: none; color: var(--muted); }
+.main-nav a.on, .tabs a.on { background: var(--accent); color: var(--accent-text); }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.4em; margin: 8px 0 12px; }
+h2 { font-size: 1.1em; margin: 20px 0 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 12px; }
+.muted { color: var(--muted); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: .9em; }
+.table-wrap { overflow-x: auto; }
+input, select, textarea { font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: 100%; }
+textarea { width: 100%; min-height: 90px; }
+button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.form-grid { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 8px 12px; align-items: start; }
+.form-grid label { color: var(--muted); padding-top: 6px; }
+@media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } .form-grid label { padding-top: 0; } }
+.badge { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .85em; font-weight: 600; border: 1px solid currentColor; }
+.v-PASS, .v-published, .v-exported, .v-final, .v-completed { color: var(--pass); }
+.v-WARN, .v-queued, .v-held, .v-drafted { color: var(--warn); }
+.v-FAIL, .v-failed { color: var(--fail); }
+.v-SKIPPED, .v-planned { color: var(--skip); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.stat .k { color: var(--muted); font-size: .85em; }
+.stat .v { font-size: 1.3em; font-weight: 600; }
+.bar { display: grid; grid-template-columns: 110px 1fr 56px; gap: 8px; align-items: center; margin: 3px 0; }
+.bar .track { height: 10px; background: var(--code); border-radius: 5px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); }
+pre, .text { background: var(--code); padding: 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.text { max-height: 480px; overflow: auto; }
+.slider { display: grid; grid-template-columns: 110px 1fr 48px; gap: 8px; align-items: center; }
+.slider input[type=range] { width: 100%; }
+svg.chart { width: 100%; height: auto; max-height: 260px; }
+svg.chart .axis { stroke: var(--line); }
+svg.chart .line { stroke: var(--accent); fill: none; stroke-width: 2; }
+svg.chart text { fill: var(--muted); font-size: 11px; }
+.cover { max-width: 200px; border-radius: 6px; border: 1px solid var(--line); }
+#toast { position: fixed; right: 16px; bottom: 16px; max-width: 420px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; display: none; white-space: pre-wrap; }
+#toast.show { display: block; }
+#toast.err { border-color: var(--fail); color: var(--fail); }

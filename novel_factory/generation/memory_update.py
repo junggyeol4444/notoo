@@ -348,9 +348,16 @@ def apply_memory(
 
     planned_new = list(plan.get("new_foreshadowings") or [])
     seen_descriptions = {f.description for f in fs.for_novel(novel.id)}
+    last = novel.planned_episodes or 0
     for item in [*planned_new, *(x.model_dump() for x in delta.new_foreshadowings)]:
         description = str(item.get("description") or "").strip()
         if not description or description in seen_descriptions:
+            continue
+        if last and n >= last:
+            # 마지막 화 뒤에는 회수할 회차가 없다 (완결 검사가 막힌다).
+            report.rejected.append(
+                f"새 복선 '{description}': 마지막 화라 회수할 자리가 없습니다."
+            )
             continue
         seen_descriptions.add(description)
         payoff = item.get("planned_payoff")
@@ -360,7 +367,9 @@ def apply_memory(
                 code=fs.next_code(novel.id),
                 description=description,
                 setup_episode=n,
-                planned_payoff=payoff if isinstance(payoff, int) and payoff > n else None,
+                planned_payoff=(min(payoff, last) if last else payoff)
+                if isinstance(payoff, int) and payoff > n
+                else None,
             )
         )
         report.undo["foreshadowings"].append(created.id)

@@ -631,3 +631,118 @@ def build_completion_prompt(
 
 # 출력 형식 (이 모양 그대로)
 {_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# 작품 설계 (기획안 57번: 새로운 세계관 · 새로운 캐릭터 · 새로운 전체 스토리)
+# ---------------------------------------------------------------------------
+GENESIS_SYSTEM = """\
+당신은 한국 장편 웹소설의 기획자다. 사용자의 요청과 장르 구조 지침을 받아 완전히 새로운
+작품의 기준(Novel Bible), 등장인물, 세계관, 복선을 설계한다.
+
+# 반드시 지킬 원칙
+1. 모든 이름·설정·사건은 새로 만든다. 이미 있는 소설·웹툰·드라마·게임의 제목, 인물,
+   고유명사, 세계관, 줄거리를 가져오거나 흉내 내지 않는다.
+2. 구조 지침(전개 속도, 인물 수, 복선 간격)은 따르되 내용은 이 작품만의 것이다.
+3. 사용자가 이미 정해 준 값('이미 정해진 작품 기준')은 바꾸지 않고 그에 맞춘다.
+4. 인물 이름은 한국어 이름으로, 서로 헷갈리지 않게 짓는다.
+5. 결말(ending)은 핵심 갈등을 해소하는 방향으로 한두 문장.
+
+설명 없이 JSON 하나만 출력한다."""
+
+
+def build_genesis_prompt(
+    *,
+    request: str,
+    given: dict[str, object],
+    planned_episodes: int,
+    chars_per_episode: int,
+    cast_rule: str,
+    foreshadow_rule: str,
+    pattern_instructions: list[str],
+) -> str:
+    example = {
+        "title": "작품 제목",
+        "logline": "한 문장 요약",
+        "premise": "핵심 소재와 설정",
+        "mood": "전체 분위기",
+        "main_conflict": "작품 전체를 끄는 갈등",
+        "ending": "계획한 결말",
+        "target_reader": "주 독자층",
+        "characters": [
+            {
+                "name": "인물 이름",
+                "role": "주인공",
+                "gender": "남",
+                "age": 29,
+                "job": "직업",
+                "appearance": "외모 한 줄",
+                "personality": ["성격1", "성격2"],
+                "speech_style": "말투",
+                "goals": ["목표"],
+                "secrets": ["비밀"],
+                "abilities": ["능력"],
+                "first_episode": 1,
+            }
+        ],
+        "world": [{"category": "조직", "name": "새 고유명사", "description": "설명"}],
+        "foreshadowings": [
+            {"description": "복선 내용", "setup_episode": 3, "planned_payoff": 40}
+        ],
+        "style": {"forbidden": ["쓰지 않을 표현"], "preferred": ["살릴 문체 특징"]},
+    }
+    return f"""# 사용자 요청
+{request or "(없음)"}
+
+# 이미 정해진 작품 기준 (바꾸지 않는다)
+{_json(given)}
+
+# 분량
+{planned_episodes}화, 회차당 약 {chars_per_episode:,}자
+
+# 인물 구성
+{cast_rule}
+역할은 주인공 / 주요조연 / 조연 / 적대자 중 하나. 주인공은 한 명.
+first_episode는 그 인물이 처음 나오는 회차 (1~{planned_episodes}).
+
+# 복선
+{foreshadow_rule}
+
+# 장르 구조 지침 (참고작에서 뽑은 구조다. 내용이 아니다)
+{_bullets(pattern_instructions)}
+
+# 출력 형식 (이 모양 그대로)
+{_json(example)}"""
+
+
+# ---------------------------------------------------------------------------
+# 사용자 요청 해석 (기획안 57번)
+# ---------------------------------------------------------------------------
+REQUEST_SYSTEM = """\
+사용자가 소설 제작을 요청한 글을 읽고 설정값으로 옮긴다. 글에 없는 값은 비워 둔다.
+지어내지 않는다.
+
+aspects에는 그 참고작에서 참고하라고 한 항목만 아래 이름으로 적는다.
+  pacing(전개 속도), episode_shape(회차 구조), cliffhanger(클리프행어),
+  foreshadowing(복선), relationship(캐릭터 관계 변화),
+  character_structure(캐릭터 구조), event_interval(사건 주기),
+  emotion(감정곡선), dialogue(대사 비율), style(문체)
+참고할 항목을 따로 말하지 않은 참고작은 aspects를 빈 목록으로 둔다.
+
+설명 없이 JSON 하나만 출력한다."""
+
+
+def build_request_prompt(text: str) -> str:
+    example = {
+        "genre": "현대판타지",
+        "title": "",
+        "episodes": 250,
+        "chars_per_episode": 5000,
+        "references": [{"name": "A", "aspects": ["pacing"]}],
+        "notes": "그 밖의 요구 사항",
+    }
+    return f"""# 사용자 요청
+{text}
+
+# 출력 형식 (이 모양 그대로)
+{_json(example)}"""

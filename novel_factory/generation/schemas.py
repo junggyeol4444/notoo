@@ -276,3 +276,79 @@ class CompletionOut(_Lenient):
     ending_issues: list[str] = Field(default_factory=list)
 
     _lists = field_validator("ending_issues", mode="before")(_as_list)
+
+
+# ---------------------------------------------------------------------------
+# 작품 설계 (기획안 57번)
+# ---------------------------------------------------------------------------
+class GenesisCharacter(_Lenient):
+    name: str = Field(min_length=1)
+    role: str = "조연"
+    gender: str = ""
+    age: int | None = None
+    job: str = ""
+    appearance: str = ""
+    personality: list[str] = Field(default_factory=list)
+    speech_style: str = ""
+    goals: list[str] = Field(default_factory=list)
+    secrets: list[str] = Field(default_factory=list)
+    abilities: list[str] = Field(default_factory=list)
+    first_episode: int | None = None
+
+    _lists = field_validator("personality", "goals", "secrets", "abilities", mode="before")(
+        _as_list
+    )
+
+    @field_validator("age", mode="before")
+    @classmethod
+    def _age(cls, value: object) -> object:
+        if isinstance(value, str):
+            m = _NUMBER_RE.search(value)
+            return int(float(m.group())) if m else None
+        return value
+
+
+class GenesisForeshadowing(_Lenient):
+    description: str = Field(min_length=1)
+    setup_episode: int = 1
+    planned_payoff: int | None = None
+
+
+class GenesisStyle(_Lenient):
+    forbidden: list[str] = Field(default_factory=list)
+    preferred: list[str] = Field(default_factory=list)
+
+    _lists = field_validator("forbidden", "preferred", mode="before")(_as_list)
+
+
+class GenesisOut(_Lenient):
+    title: str = ""
+    logline: str = Field(min_length=5)
+    premise: str = ""
+    mood: str = ""
+    main_conflict: str = Field(min_length=5)
+    ending: str = ""
+    target_reader: str = ""
+    characters: list[GenesisCharacter] = Field(min_length=2)
+    world: list[WorldFact] = Field(default_factory=list)
+    foreshadowings: list[GenesisForeshadowing] = Field(default_factory=list)
+    style: GenesisStyle = Field(default_factory=GenesisStyle)
+
+
+# ---------------------------------------------------------------------------
+# 사용자 요청 해석 (기획안 57번)
+# ---------------------------------------------------------------------------
+class RequestReference(_Lenient):
+    name: str = Field(min_length=1)
+    aspects: list[str] = Field(default_factory=list)
+
+    _list = field_validator("aspects", mode="before")(_as_list)
+
+
+class RequestOut(_Lenient):
+    genre: str = ""
+    title: str = ""
+    episodes: int | None = None
+    chars_per_episode: int | None = None
+    references: list[RequestReference] = Field(default_factory=list)
+    notes: str = ""

@@ -44,6 +44,10 @@ novel-factory = "novel_factory.cli:main"
 [tool.setuptools.packages.find]
 include = ["novel_factory*"]
 
+[tool.setuptools.package-data]
+# 관리자 화면 정적 파일
+"novel_factory.app" = ["static/admin/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [

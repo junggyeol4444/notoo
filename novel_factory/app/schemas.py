@@ -165,6 +165,8 @@ class CharacterOut(BaseModel):
     speech_style: str
     first_episode: int | None
     is_alive: bool
+    exit_episode: int | None = None
+    gender: str = ""
 
 
 class KnowledgeIn(BaseModel):

@@ -213,6 +213,10 @@ def sanitize_plan(
     span = round(statistics.fmean(guidance.foreshadow_span))
     n = directives.episode_number
     fixed = []
+    if total_episodes and n >= total_episodes and data.get("new_foreshadowings"):
+        # 마지막 화에 심은 복선은 회수할 회차가 없다. 남기면 완결 검사가 영영 막힌다.
+        warnings.append("마지막 화라 새 복선을 심지 않습니다.")
+        data["new_foreshadowings"] = []
     for item in data.get("new_foreshadowings") or []:
         payoff = item.get("planned_payoff")
         if not isinstance(payoff, int) or payoff <= n:
