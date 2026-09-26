@@ -54,7 +54,10 @@ class TestHealth:
     def test_reports_configuration(self, client) -> None:
         body = _ok(client.get("/health"))
         assert body["status"] == "ok"
-        assert body["database"] == "sqlite"
+        from conftest import TEST_DATABASE_URL
+
+        expected = TEST_DATABASE_URL.split("://")[0].split("+")[0] or "sqlite"
+        assert body["database"] == expected
         assert body["llm_configured"] is False
         assert ".epub" in body["supported_formats"]
 

@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -109,11 +109,21 @@ def create_all(settings: Settings | None = None) -> None:
     굳지 않은 단계라 create_all로 시작한다.
     """
     from novel_factory.database import models  # noqa: F401  모델 등록
+    from novel_factory.database.vector import ensure_pgvector, pgvector_active
 
-    Base.metadata.create_all(bind=get_engine(settings))
+    engine = get_engine(settings)
+    Base.metadata.create_all(bind=engine)
+    if pgvector_active(engine, settings):
+        ensure_pgvector(engine)
 
 
 def drop_all(settings: Settings | None = None) -> None:
     from novel_factory.database import models  # noqa: F401
+    from novel_factory.database.vector import PG_VECTOR_TABLE
 
-    Base.metadata.drop_all(bind=get_engine(settings))
+    engine = get_engine(settings)
+    if engine.dialect.name == "postgresql":
+        # 모델에 없는 벡터 테이블이 memory_chunks를 참조하므로 먼저 지운다.
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {PG_VECTOR_TABLE}"))
+    Base.metadata.drop_all(bind=engine)

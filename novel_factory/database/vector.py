@@ -1,8 +1,7 @@
 """의미 검색 (기획안 41번).
 
-기획안은 pgvector를 쓴다고 돼 있다. 여기서는 그 자리에 들어갈 인터페이스를
-정의하고, SQLite에서도 도는 순수 파이썬 구현을 기본으로 둔다.
-PostgreSQL로 옮길 때 PgVectorIndex만 채우면 된다.
+기획안은 pgvector를 쓴다고 돼 있다. SQLite에서는 파이썬으로 코사인 유사도를 계산하고,
+PostgreSQL + NF_VECTOR_BACKEND=pgvector면 벡터 테이블을 두고 DB가 순위를 매긴다.
 
 임베딩 모델은 이 모듈이 정하지 않는다. 로컬 임베딩 서버든 다른 무엇이든
 `Embedder` 프로토콜만 만족하면 된다.
@@ -14,9 +13,10 @@ import math
 from dataclasses import dataclass
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import Connection, Engine, select, text
 from sqlalchemy.orm import Session
 
+from novel_factory.config import Settings, get_settings
 from novel_factory.database.models import MemoryChunk
 
 
@@ -160,14 +160,128 @@ class SqliteVectorIndex(VectorIndex):
         return hits[:top_k]
 
 
-class PgVectorIndex(SqliteVectorIndex):
-    """pgvector 자리.
+# ---------------------------------------------------------------------------
+# pgvector (PostgreSQL)
+# ---------------------------------------------------------------------------
+PG_VECTOR_TABLE = "memory_vectors"
 
-    아직 SQLite 구현을 그대로 쓴다. PostgreSQL로 옮길 때
-      1. MemoryChunk.embedding을 Vector(dim) 타입으로 바꾸고
-      2. search()를 `ORDER BY embedding <=> :query LIMIT :k`로 교체한다.
-    그때까지는 동작은 같고 속도만 느리다.
+
+def pgvector_active(
+    bind: Engine | Connection | Session, settings: Settings | None = None
+) -> bool:
+    """PostgreSQL이고 NF_VECTOR_BACKEND=pgvector일 때만 쓴다."""
+    cfg = settings or get_settings()
+    if cfg.vector_backend != "pgvector":
+        return False
+    engine = bind.get_bind() if isinstance(bind, Session) else bind
+    return engine.dialect.name == "postgresql"
+
+
+def ensure_pgvector(engine: Engine) -> None:
+    """확장과 벡터 테이블을 만든다.
+
+    벡터는 memory_chunks.embedding(JSON)에도 그대로 남긴다. JSON 쪽은 어느 DB에서나
+    읽히고 다시 색인할 때 원본이 된다. 검색 순위만 여기 vector 컬럼으로 DB가 매긴다.
+    임베딩 모델마다 차원이 달라 컬럼에 차원을 고정하지 않는다 (그래서 근사 색인은
+    쓰지 않고 정확 검색을 한다. 한 작품의 조각 수천 개 규모에서는 충분하다).
     """
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.execute(
+            text(
+                f"CREATE TABLE IF NOT EXISTS {PG_VECTOR_TABLE} ("
+                " chunk_id integer PRIMARY KEY"
+                " REFERENCES memory_chunks(id) ON DELETE CASCADE,"
+                " novel_id integer NOT NULL,"
+                " model varchar(200) NOT NULL,"
+                " embedding vector NOT NULL)"
+            )
+        )
+        conn.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS ix_{PG_VECTOR_TABLE}_novel_model "
+                f"ON {PG_VECTOR_TABLE} (novel_id, model)"
+            )
+        )
+
+
+def _literal(vector: list[float]) -> str:
+    return "[" + ",".join(repr(float(x)) for x in vector) + "]"
+
+
+def store_vectors(session: Session, rows: list[tuple[int, int, str, list[float]]]) -> None:
+    """(chunk_id, novel_id, model, 벡터)를 벡터 테이블에 넣는다."""
+    for chunk_id, novel_id, model, vector in rows:
+        session.execute(
+            text(
+                f"INSERT INTO {PG_VECTOR_TABLE} (chunk_id, novel_id, model, embedding) "
+                "VALUES (:c, :n, :m, CAST(:v AS vector)) "
+                "ON CONFLICT (chunk_id) DO UPDATE SET model = EXCLUDED.model, "
+                "embedding = EXCLUDED.embedding"
+            ),
+            {"c": chunk_id, "n": novel_id, "m": model, "v": _literal(vector)},
+        )
+
+
+def search_vectors(
+    session: Session,
+    novel_id: int,
+    model: str,
+    query: list[float],
+    *,
+    before_episode: int,
+    kind: str,
+    limit: int,
+) -> list[tuple[int, float]]:
+    """(chunk_id, 코사인 유사도). 앞 회차 조각만, 가까운 순."""
+    rows = session.execute(
+        text(
+            f"SELECT v.chunk_id, 1 - (v.embedding <=> CAST(:q AS vector)) AS score "
+            f"FROM {PG_VECTOR_TABLE} v JOIN memory_chunks c ON c.id = v.chunk_id "
+            "WHERE v.novel_id = :n AND v.model = :m AND c.kind = :k "
+            "AND c.episode_number < :before AND vector_dims(v.embedding) = :d "
+            "ORDER BY v.embedding <=> CAST(:q AS vector) LIMIT :lim"
+        ),
+        {
+            "q": _literal(query),
+            "n": novel_id,
+            "m": model,
+            "k": kind,
+            "before": before_episode,
+            "d": len(query),
+            "lim": limit,
+        },
+    )
+    return [(int(r[0]), float(r[1])) for r in rows]
+
+
+class PgVectorIndex(SqliteVectorIndex):
+    """PostgreSQL + pgvector. 조각을 넣을 때 벡터 테이블에도 넣는다."""
+
+    def add(
+        self,
+        session: Session,
+        novel_id: int,
+        content: str,
+        *,
+        kind: str = "scene",
+        episode_number: int | None = None,
+        embedding: list[float] | None = None,
+        meta: dict | None = None,
+    ) -> MemoryChunk:
+        chunk = super().add(
+            session,
+            novel_id,
+            content,
+            kind=kind,
+            episode_number=episode_number,
+            embedding=embedding,
+            meta=meta,
+        )
+        if embedding and pgvector_active(session):
+            model = str((meta or {}).get("embed_model") or "")
+            store_vectors(session, [(chunk.id, novel_id, model, embedding)])
+        return chunk
 
 
 def get_vector_index(backend: str = "sqlite") -> VectorIndex:

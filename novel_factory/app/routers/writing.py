@@ -10,6 +10,7 @@
     POST /novels/{slug}/episodes/{n}/generate       위 단계를 한 번에
     POST /novels/{slug}/complete                    완결 검사 (통과하면 completed)
     GET  /novels/{slug}/completion                  마지막 완결 검사 결과
+    GET  /novels/{slug}/evaluation                  장기 생성 평가 (기획안 55번)
     GET  /novels/{slug}/episodes                    회차 목록
     GET  /novels/{slug}/episodes/{n}                회차 상세
 
@@ -43,6 +44,7 @@ from novel_factory.llm.base import LLMProvider
 from novel_factory.memory.retrieval import index_episode
 from novel_factory.publishing.queue import on_episode_final
 from novel_factory.quality.completion import check_completion
+from novel_factory.quality.evaluation import evaluate_novel
 from novel_factory.quality.runner import check_and_fix
 
 router = APIRouter(prefix="/novels", tags=["writing"])
@@ -299,3 +301,14 @@ def completion_report(novel: Novel = Depends(get_novel)) -> dict[str, object]:
     if not report:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "완결 검사를 아직 하지 않았습니다.")
     return report
+
+
+@router.get("/{slug}/evaluation")
+def evaluation(
+    start: int = 1,
+    end: int | None = None,
+    novel: Novel = Depends(get_novel),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """30화·100화 연속 생성 평가 (기획안 55번 Phase 5·6). 기준선 없이 수치만 낸다."""
+    return evaluate_novel(db, novel, start=start, end=end)

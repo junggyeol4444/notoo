@@ -66,6 +66,18 @@ class KnowledgeRepository(BaseRepository[CharacterKnowledge]):
             )
         )
 
+    def for_characters(self, character_ids: list[int]) -> list[CharacterKnowledge]:
+        """여러 인물의 지식을 한 번에 (인물 순서는 호출한 쪽이 맞춘다)."""
+        if not character_ids:
+            return []
+        return list(
+            self.session.scalars(
+                select(CharacterKnowledge)
+                .where(CharacterKnowledge.character_id.in_(list(character_ids)))
+                .order_by(CharacterKnowledge.id)
+            )
+        )
+
     def knows(
         self, character_id: int, fact_key: str, as_of_episode: int | None = None
     ) -> bool:
@@ -156,6 +168,31 @@ class RelationshipRepository(BaseRepository[Relationship]):
             .order_by(Relationship.from_episode.desc())
             .limit(1)
         )
+
+    def states_at(
+        self, novel_id: int, character_ids: list[int], episode_number: int
+    ) -> dict[tuple[int, int], Relationship]:
+        """여러 인물 사이의 관계를 한 번에. (source_id, target_id) → 그 시점의 한 줄.
+
+        인물 쌍마다 state_at()을 부르면 인물이 50명일 때 쿼리가 2,000번을 넘는다.
+        """
+        ids = list(character_ids)
+        if not ids:
+            return {}
+        rows = self.session.scalars(
+            select(Relationship)
+            .where(
+                Relationship.novel_id == novel_id,
+                Relationship.source_id.in_(ids),
+                Relationship.target_id.in_(ids),
+                Relationship.from_episode <= episode_number,
+            )
+            .order_by(Relationship.from_episode, Relationship.id)
+        )
+        latest: dict[tuple[int, int], Relationship] = {}
+        for row in rows:  # 회차 순이라 뒤의 것이 이긴다
+            latest[(row.source_id, row.target_id)] = row
+        return latest
 
     def record(
         self,

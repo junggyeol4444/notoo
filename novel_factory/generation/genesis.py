@@ -40,6 +40,8 @@ from novel_factory.generation.prompts import GENESIS_SYSTEM, build_genesis_promp
 from novel_factory.generation.schemas import GenesisOut
 from novel_factory.generation.structured import request_structured
 from novel_factory.llm.base import LLMProvider, Message
+from novel_factory.reference.service import linked_name_hashes
+from novel_factory.reference.similarity.names import hash_name, name_salt
 
 GENESIS_OUTPUT_TOKENS = 6000
 ROLES = ("주인공", "주요조연", "조연", "적대자")
@@ -117,9 +119,21 @@ def apply_genesis(
     novel: Novel,
     out: GenesisOut,
     guide: GenreGuidance,
+    *,
+    reference_names: dict[str, str] | None = None,
+    salt: bytes = b"",
 ) -> GenesisResult:
-    """LLM 결과를 검증해 DB에 넣는다. LLM 없이 돈다."""
+    """LLM 결과를 검증해 DB에 넣는다. LLM 없이 돈다.
+
+    reference_names(참고작 인물 이름 해시)와 같은 이름의 인물·세계관 항목은 넣지 않는다
+    (기획안 56번 셋째 원칙: 참고작의 고유명사·캐릭터를 가져오지 않는다).
+    """
     result = GenesisResult(novel)
+    banned = reference_names or {}
+
+    def from_reference(name: str) -> bool:
+        return bool(banned) and hash_name(name, salt) in banned
+
     planned = max(novel.planned_episodes, 1)
 
     # --- Novel Bible: 사용자가 정한 값은 두고 빈 칸만 채운다 --------------------
@@ -141,6 +155,9 @@ def apply_genesis(
         name = c.name.strip()
         if name in taken:
             result.warnings.append(f"이름이 겹치는 인물 '{name}'을 뺐습니다.")
+            continue
+        if from_reference(name):
+            result.warnings.append(f"참고작 인물과 이름이 같은 '{name}'을 뺐습니다.")
             continue
         role = c.role.strip() if c.role.strip() in ROLES else "조연"
         if role != c.role.strip():
@@ -201,6 +218,9 @@ def apply_genesis(
     world_repo = WorldRepository(session)
     for w in out.world:
         if world_repo.get_by_name(novel.id, w.category, w.name) is not None:
+            continue
+        if from_reference(w.name.strip()):
+            result.warnings.append(f"참고작 고유명사와 같은 '{w.name}'을 뺐습니다.")
             continue
         session.add(
             WorldEntry(
@@ -307,6 +327,17 @@ def design_novel(
         temperature=min(cfg.llm_temperature, 0.9),  # 짓는 일이라 계획보다 온도를 높게
         max_tokens=GENESIS_OUTPUT_TOKENS,
     )
-    result = apply_genesis(session, novel, out, guide)
+    result = apply_genesis(
+        session,
+        novel,
+        out,
+        guide,
+        reference_names=linked_name_hashes(session, novel),
+        salt=name_salt(cfg),
+    )
+    if not CharacterRepository(session).for_novel(novel.id):
+        raise NovelFactoryError(
+            "작품 설계 결과에 쓸 수 있는 인물이 없습니다: " + "; ".join(result.warnings)
+        )
     result.attempts = structured.attempts
     return result

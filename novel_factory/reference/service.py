@@ -9,11 +9,12 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from novel_factory.database.models import ReferenceNovel
-from novel_factory.database.repositories import ReferenceRepository
+from novel_factory.database.models import Novel, ReferenceNovel
+from novel_factory.database.repositories import ReferenceLinkRepository, ReferenceRepository
 from novel_factory.errors import NovelFactoryError
 from novel_factory.reference.pipeline import analyze_file
 from novel_factory.reference.profile import ReferenceProfile
+from novel_factory.reference.similarity.names import name_salt, reference_name_hashes
 
 
 def analyze_reference_record(
@@ -48,9 +49,15 @@ def analyze_reference_record(
     profile: ReferenceProfile = result.profile
     if genre:
         ref.genre = genre
+    stored = profile.as_dict()
+    # 인물 이름은 저장하지 않고 salt 해시만 남긴다 (고유명사 재사용 검사용).
+    people = profile.characters.characters if profile.characters else []
+    stored["name_hashes"] = reference_name_hashes(
+        [(c.name, c.role) for c in people], name_salt()
+    )
     repo.save_profile(
         ref,
-        profile.as_dict(),
+        stored,
         episode_count=profile.basic.episode_count if profile.basic else 0,
         warnings=profile.warnings,
     )
@@ -58,3 +65,17 @@ def analyze_reference_record(
         repo.save_fingerprints(ref, result.metrics)
     ref.analyzed_at = datetime.now(UTC)
     return profile
+
+
+def linked_name_hashes(session: Session, novel: Novel) -> dict[str, str]:
+    """작품에 연결된 참고작들의 인물 이름 해시 → 등급 ("main" / "other")."""
+    out: dict[str, str] = {}
+    refs = ReferenceRepository(session)
+    for link in ReferenceLinkRepository(session).for_novel(novel.id):
+        ref = refs.get(link.reference_id)
+        hashes = ((ref.profile if ref else None) or {}).get("name_hashes") or {}
+        for h in hashes.get("other") or []:
+            out.setdefault(h, "other")
+        for h in hashes.get("main") or []:
+            out[h] = "main"
+    return out

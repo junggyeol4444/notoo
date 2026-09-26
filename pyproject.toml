@@ -25,7 +25,7 @@ dependencies = [
 # PDF 파싱. 없어도 나머지 포맷은 전부 동작한다.
 pdf = ["pypdf>=5.0"]
 # PostgreSQL + pgvector로 옮길 때
-postgres = ["psycopg[binary]>=3.2", "pgvector>=0.3"]
+postgres = ["psycopg[binary]>=3.2"]
 # 표지·썸네일 JPEG 생성 (기획안 43번). EPUB 제작 자체는 표준 라이브러리로 한다.
 publish = ["pillow>=10"]
 dev = [
@@ -50,6 +50,9 @@ include = ["novel_factory*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 100화 장기 테스트는 느려서 기본에서 뺀다. 돌리려면 pytest -m long
+addopts = "-m 'not long'"
+markers = ["long: 수십 초 이상 걸리는 장기 생성 테스트 (기획안 55번 Phase 6)"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",

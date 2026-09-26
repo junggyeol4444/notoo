@@ -564,3 +564,40 @@ class TestApi:
         )
         r = client.post("/novels/api/memory/reindex")
         assert r.json()["episodes"] == 1 and r.json()["embedded"] == 0
+
+
+class TestPgVector:
+    """PostgreSQL + pgvector에서만 돈다 (NF_TEST_DATABASE_URL, NF_TEST_VECTOR_BACKEND)."""
+
+    def test_vectors_go_to_pgvector_and_db_ranks(self, db, novel, settings, monkeypatch):
+        from sqlalchemy import text
+
+        from novel_factory.database import vector as vector_module
+        from novel_factory.database.vector import PG_VECTOR_TABLE, pgvector_active
+
+        if not pgvector_active(db, settings):
+            pytest.skip("PostgreSQL + pgvector가 아니다")
+        embedder = FakeEmbedder()
+        ep1 = _episode(db, novel, 1, ["도윤은 계약 조건을 다시 읽었다.", "비가 그쳤다."])
+        ep2 = _episode(db, novel, 2, ["서연은 커피를 마셨다."])
+        index_episode(db, novel, ep1, settings=settings, embedder=embedder)
+        index_episode(db, novel, ep2, settings=settings, embedder=embedder)
+        count = db.execute(text(f"SELECT count(*) FROM {PG_VECTOR_TABLE}")).scalar_one()
+        assert count == 3
+
+        calls = []
+        real = vector_module.search_vectors
+
+        def spy(*args, **kwargs):
+            calls.append(kwargs)
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr("novel_factory.memory.retrieval.search_vectors", spy)
+        result = search_memory(
+            db, novel, "협약", before_episode=3, settings=settings, embedder=embedder
+        )
+        assert calls and result.method == "embedding"
+        assert (result.hits[0].episode_number, result.hits[0].scene_index) == (1, 0)
+        # 다시 색인하면 벡터 행도 갈아 끼워진다 (조각이 지워지면 함께 지워진다)
+        index_episode(db, novel, ep1, settings=settings, embedder=embedder)
+        assert db.execute(text(f"SELECT count(*) FROM {PG_VECTOR_TABLE}")).scalar_one() == 3

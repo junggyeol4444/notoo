@@ -314,8 +314,25 @@ def choose_hook(
 
 
 def hook_history(session: Session, novel: Novel, before: int) -> list[str]:
-    """이전 회차들의 클리프행어 유형."""
+    """이전 회차들에 계획한 클리프행어 유형 (계획하지 않았으면 "없음").
+
+    원고에서 판정한 유형(episode.hook_type)이 아니라 계획을 센다. 판정값을 세면
+    훅을 요구하지 않은 회차가 우연히 훅처럼 끝났을 때 그것까지 사용률에 들어가
+    계획된 훅이 다시 지시되지 않는다 (30화 평가에서 6화 이후 훅 지시가 끊겼다).
+    지시 기록이 없는 회차(사람이 직접 넣은 회차 등)만 판정값으로 대신한다.
+    """
     episodes = EpisodeRepository(session).recent(novel.id, count=10_000, before=before)
-    return [
-        e.hook_type or NO_CLIFFHANGER for e in episodes if e.status in ("final", "checked")
-    ]
+    out: list[str] = []
+    for e in episodes:
+        if e.status not in ("final", "checked"):
+            continue
+        planned = ((e.outline or {}).get("directives") or {}).get("hook")
+        if isinstance(planned, dict):
+            out.append(
+                str(planned.get("kind") or NO_CLIFFHANGER)
+                if planned.get("required")
+                else NO_CLIFFHANGER
+            )
+        else:
+            out.append(e.hook_type or NO_CLIFFHANGER)
+    return out

@@ -3,7 +3,8 @@
     uvicorn novel_factory.app.main:app --reload
 
 Phase 1(참고작 분석), Phase 2(장기기억 DB), Phase 3(집필), 품질 검사,
-장편 기억 검색, 자동 집필 스케줄러가 여기 붙어 있다. EPUB, 출판은 아직 없다.
+장편 기억 검색, 자동 집필 스케줄러, 표지·EPUB·출판, 작품 생성, 관리자 화면(/admin)이
+여기 붙어 있다.
 """
 
 from __future__ import annotations
@@ -55,6 +56,10 @@ DESCRIPTION = """
 - 품질 검사와 자동 수정 (Continuity, Logic, Similarity, Style, Hook, Reader)
 - 장편 기억 검색 (앞 회차 장면 의미/어휘 검색)
 - 자동 집필 스케줄러 (서버 내장, 매일 정해진 시각)
+- 표지 · EPUB · 전자책 메타데이터 · 출판 대기열
+- 완결 검사, 장기 생성 평가
+- 작품 생성 (POST /projects: 요청 글 → 분석 → 설계 → 집필 예약)
+- 관리자 화면: /admin
 
 원칙
 - 참고작 원문은 저장하지 않는다. 구조 수치와 복원 불가능한 해시 지문만 남긴다.
@@ -166,7 +171,8 @@ def health(check_llm: bool = False) -> HealthOut:
         llm_available = get_provider(settings).available
     return HealthOut(
         status="ok",
-        database=settings.database_url.split("://", 1)[0],
+        # "postgresql+psycopg" 같은 드라이버 표기는 빼고 DB 종류만
+        database=settings.database_url.split("://", 1)[0].split("+", 1)[0],
         llm_configured=settings.llm_enabled,
         llm_available=llm_available,
         supported_formats=sorted(SUPPORTED_EXTENSIONS),

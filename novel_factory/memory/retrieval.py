@@ -31,13 +31,20 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from novel_factory.config import Settings, get_settings
 from novel_factory.database.models import Episode, MemoryChunk, Novel
-from novel_factory.database.vector import Embedder, cosine
+from novel_factory.database.vector import (
+    Embedder,
+    cosine,
+    pgvector_active,
+    search_vectors,
+    store_vectors,
+)
 from novel_factory.errors import LLMError
 from novel_factory.llm.embeddings import get_embedder
 
@@ -88,11 +95,21 @@ def terms(text: str) -> list[str]:
     return out
 
 
+@lru_cache(maxsize=50_000)
+def _doc_terms(text: str) -> Counter[str]:
+    """조각의 2-gram 빈도. 조각 내용은 바뀌지 않으므로 캐시한다.
+
+    캐시가 없으면 회차마다 앞 회차 조각 전부를 다시 쪼갠다. 100화 연속 생성
+    프로파일에서 이 부분이 시간을 가장 많이 썼다. 돌려준 Counter는 읽기만 한다.
+    """
+    return Counter(terms(text))
+
+
 def bm25_scores(query: str, documents: list[str]) -> list[float]:
     q = set(terms(query))
     if not q or not documents:
         return [0.0] * len(documents)
-    docs = [Counter(terms(d)) for d in documents]
+    docs = [_doc_terms(d) for d in documents]
     lengths = [sum(d.values()) for d in docs]
     avg = (sum(lengths) / len(lengths)) or 1.0
     n = len(docs)
@@ -186,8 +203,9 @@ def index_episode(
     finally:
         _close(use, owned)
     model = use.model if (use is not None and vectors is not None) else ""
+    created: list[MemoryChunk] = []
     for i, (si, pi, piece) in enumerate(pieces):
-        session.add(
+        created.append(
             MemoryChunk(
                 novel_id=novel.id,
                 episode_number=episode.number,
@@ -202,7 +220,12 @@ def index_episode(
                 },
             )
         )
+    session.add_all(created)
     session.flush()
+    if vectors is not None and pgvector_active(session, cfg):
+        store_vectors(
+            session, [(c.id, novel.id, model, c.embedding or []) for c in created]
+        )
     return warnings
 
 
@@ -401,10 +424,28 @@ def search_memory(
                 except LLMError as exc:
                     result.warnings.append(f"질의 임베딩 실패: {exc}")
                 else:
-                    ranked = sorted(
-                        ((cosine(qv, c.embedding or []), c) for c in matching),
-                        key=lambda x: -x[0],
-                    )
+                    if pgvector_active(session, cfg):
+                        # PostgreSQL이 순위를 매긴다. 같은 장면 조각이 겹칠 수 있어
+                        # 넉넉히 받는다.
+                        by_id = {c.id: c for c in matching}
+                        ranked = [
+                            (score, by_id[cid])
+                            for cid, score in search_vectors(
+                                session,
+                                novel.id,
+                                use.model,
+                                qv,
+                                before_episode=before_episode,
+                                kind=SCENE,
+                                limit=k * 4,
+                            )
+                            if cid in by_id
+                        ]
+                    else:
+                        ranked = sorted(
+                            ((cosine(qv, c.embedding or []), c) for c in matching),
+                            key=lambda x: -x[0],
+                        )
                     result.method = "embedding"
                     result.hits = _distinct_scenes(ranked, k, query)
                     return result

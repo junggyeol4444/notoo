@@ -149,11 +149,11 @@ class TestGenesis:
         assert novel.title == "두 번째 인수합병"
         assert novel.main_conflict == "사용자가 정한 갈등"  # 사용자가 정한 값은 그대로
         chars = {c.name: c for c in CharacterRepository(db).for_novel(novel.id)}
-        assert set(chars) == {"김도윤", "박서연", "최민석", "강태호"}  # 겹친 이름은 뺐다
-        assert chars["김도윤"].role == "주인공" and chars["김도윤"].first_episode == 1
-        assert chars["김도윤"].age == 34 and chars["김도윤"].code == "C001"
-        assert chars["최민석"].role == "조연"  # 없는 역할은 조연으로
-        assert chars["강태호"].first_episode == 1 + 5  # 범위 밖 → 등장 간격으로 배치
+        assert set(chars) == {"한지오", "윤채원", "서민호", "백도경"}  # 겹친 이름은 뺐다
+        assert chars["한지오"].role == "주인공" and chars["한지오"].first_episode == 1
+        assert chars["한지오"].age == 34 and chars["한지오"].code == "C001"
+        assert chars["서민호"].role == "조연"  # 없는 역할은 조연으로
+        assert chars["백도경"].first_episode == 1 + 5  # 범위 밖 → 등장 간격으로 배치
         fs = db.scalars(select(Foreshadowing).order_by(Foreshadowing.code)).all()
         assert [(f.code, f.setup_episode) for f in fs] == [("F001", 1), ("F002", 2)]
         low, _high = guide.foreshadow_span
@@ -322,3 +322,86 @@ class TestApi:
     def test_without_llm(self, client) -> None:
         r = client.post("/projects", json={"genre": "무협", "episodes": 3})
         assert r.status_code == 400 and "LLM" in r.json()["detail"]
+
+
+class TestReferenceNames:
+    """기획안 36번 고유 설정 유사 · 56번 셋째 원칙. 픽스처 참고작의 인물은
+    이준혁(주인공), 최민석(주요조연), 박서연, 김도윤, 강태호다."""
+
+    def _linked(self, db, references) -> Novel:
+        from novel_factory.reference.service import analyze_reference_record
+
+        ref = references[0]
+        analyze_reference_record(db, ref)
+        novel = NovelRepository(db).add(
+            Novel(slug="names", title="t", genre="현대판타지", planned_episodes=20)
+        )
+        ReferenceLinkRepository(db).upsert(novel.id, ref.id)
+        db.flush()
+        return novel
+
+    def test_profile_keeps_hashes_not_names(self, db, references) -> None:
+        import json
+
+        self._linked(db, references)
+        stored = json.dumps(references[0].profile, ensure_ascii=False)
+        assert "이준혁" not in stored and "최민석" not in stored
+        hashes = references[0].profile["name_hashes"]
+        assert len(hashes["main"]) >= 1 and all(len(h) == 32 for h in hashes["main"])
+
+    def test_genesis_drops_reference_names(self, db, settings, references) -> None:
+        from novel_factory.generation.genesis import apply_genesis
+        from novel_factory.generation.schemas import GenesisOut
+        from novel_factory.reference.service import linked_name_hashes
+        from novel_factory.reference.similarity.names import name_salt
+
+        novel = self._linked(db, references)
+        out = GenesisOut.model_validate(
+            {
+                "logline": "새 작품의 로그라인",
+                "main_conflict": "새 작품의 갈등",
+                "characters": [
+                    {"name": "이준혁", "role": "주인공"},
+                    {"name": "한지오", "role": "주인공"},
+                ],
+                "world": [{"category": "인물", "name": "최민석", "description": "x"}],
+            }
+        )
+        result = apply_genesis(
+            db,
+            novel,
+            out,
+            GenreGuidance(source="defaults"),
+            reference_names=linked_name_hashes(db, novel),
+            salt=name_salt(settings),
+        )
+        names = [c.name for c in CharacterRepository(db).for_novel(novel.id)]
+        assert names == ["한지오"] and result.world == []
+        assert any("이준혁" in w for w in result.warnings)
+
+    def test_similarity_flags_reused_name(self, db, settings, references) -> None:
+        from novel_factory.database.models import Episode
+        from novel_factory.quality.runner import run_checks
+
+        novel = self._linked(db, references)
+        ep = Episode(
+            novel_id=novel.id,
+            number=1,
+            title="1화",
+            status="drafted",
+            scenes=[
+                {"text": "한지오는 서류를 넘겼다."},
+                {"text": "그때 이준혁이 문을 열었다. 김도윤도 뒤따랐다."},
+            ],
+            final_text="한지오는 서류를 넘겼다.\n\n그때 이준혁이 문을 열었다. 김도윤도 뒤따랐다.",
+        )
+        db.add(ep)
+        db.flush()
+        report = run_checks(db, novel, ep, None, settings=settings, logic=False)
+        issues = {
+            i.evidence["name"]: (i.severity.value, i.scene_index)
+            for i in report.results["Similarity"].issues
+            if i.code == "reference_name"
+        }
+        assert issues == {"이준혁": ("FAIL", 1), "김도윤": ("WARN", 1)}
+        assert report.failing_scenes() == {1: report.failing_scenes()[1]}

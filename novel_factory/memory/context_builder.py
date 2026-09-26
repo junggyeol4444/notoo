@@ -266,15 +266,13 @@ def build_context(
     ctx.characters = [_character_dict(c) for c in cast]
 
     # 관계는 이번 화 시점의 상태만.
-    rel_repo = RelationshipRepository(session)
     by_id = {c.id: c for c in cast}
-    seen: set[tuple[int, int]] = set()
+    states = RelationshipRepository(session).states_at(
+        novel.id, list(by_id), episode_number
+    )
     for a in cast:
         for b in cast:
-            if a.id == b.id or (a.id, b.id) in seen:
-                continue
-            seen.add((a.id, b.id))
-            state = rel_repo.state_at(novel.id, a.id, b.id, episode_number)
+            state = states.get((a.id, b.id)) if a.id != b.id else None
             if state is not None:
                 ctx.relationships.append(
                     {
@@ -287,9 +285,11 @@ def build_context(
                 )
 
     # 정보 제한: 이번 화 등장인물이 '모르는' 사실만 추린다.
-    know_repo = KnowledgeRepository(session)
+    rows_by_char: dict[int, list] = {}
+    for row in KnowledgeRepository(session).for_characters([c.id for c in cast]):
+        rows_by_char.setdefault(row.character_id, []).append(row)
     for c in cast:
-        for row in know_repo.for_character(c.id):
+        for row in rows_by_char.get(c.id, []):
             unknown = not row.knows or (
                 row.learned_episode is not None and row.learned_episode > episode_number
             )

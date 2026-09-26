@@ -10,6 +10,7 @@
     novel-factory create --file 요청.txt          요청 글로 작품을 만들고 집필 예약
     novel-factory create "현대판타지 ... 250화" --write
                                                   만든 뒤 멈출 때까지 바로 쓴다
+    novel-factory evaluate hoegwi --end 30        30화까지 설정 오류·패턴·복선 평가
     novel-factory run-schedule                    자동 집필이 켜진 작품을 지금 쓴다
     novel-factory run-schedule hoegwi             이 작품만 지금 쓴다 (꺼져 있어도)
     novel-factory serve                           API 서버 실행
@@ -249,6 +250,20 @@ def _cmd_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_evaluate(args: argparse.Namespace) -> int:
+    import json
+
+    from novel_factory.database import create_all, session_scope
+    from novel_factory.quality.evaluation import evaluate_novel
+
+    create_all()
+    with session_scope() as session:
+        novel = _open_novel(session, args.slug)
+        report = evaluate_novel(session, novel, start=args.start, end=args.end or None)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_run_schedule(args: argparse.Namespace) -> int:
     """서버 없이 스케줄러 작업을 한 번 돌린다. OS 작업 스케줄러에 걸어도 된다."""
     from novel_factory.database import create_all, session_scope
@@ -363,6 +378,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="만든 뒤 멈출 때까지 바로 쓴다 (며칠 걸릴 수 있다)",
     )
     create.set_defaults(func=_cmd_create)
+
+    evaluate = sub.add_parser("evaluate", help="장기 생성 평가 (기획안 55번)")
+    evaluate.add_argument("slug")
+    evaluate.add_argument("--start", type=int, default=1)
+    evaluate.add_argument("--end", type=int, default=0)
+    evaluate.set_defaults(func=_cmd_evaluate)
 
     run = sub.add_parser("run-schedule", help="자동 집필 작업을 지금 한 번 돌린다")
     run.add_argument(

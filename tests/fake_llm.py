@@ -421,17 +421,17 @@ class ScriptedNovelist(LLMProvider):
                 "target_reader": "20~40대",
                 "characters": [
                     {
-                        "name": "김도윤",
+                        "name": "한지오",
                         "role": "주인공",
                         "age": "34세",
                         "job": "인수합병가",
                         "personality": "냉정함",
                         "first_episode": 5,
                     },
-                    {"name": "박서연", "role": "주요조연", "job": "회계사"},
-                    {"name": "최민석", "role": "비서", "first_episode": 1},  # 없는 역할
-                    {"name": "강태호", "role": "적대자", "first_episode": planned + 50},
-                    {"name": "김도윤", "role": "조연"},  # 이름 겹침
+                    {"name": "윤채원", "role": "주요조연", "job": "회계사"},
+                    {"name": "서민호", "role": "비서", "first_episode": 1},  # 없는 역할
+                    {"name": "백도경", "role": "적대자", "first_episode": planned + 50},
+                    {"name": "한지오", "role": "조연"},  # 이름 겹침
                 ],
                 "world": [
                     {"category": "회사", "name": "대성그룹", "description": "재계 1위"}

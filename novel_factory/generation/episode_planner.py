@@ -307,6 +307,7 @@ def plan_episode(
         "guidance": guide.as_dict(),
         "pattern_instructions": guide.pattern_instructions,
         "context_trimmed": report.trimmed,
+        "memory_search": report.memory_search,
     }
     session.flush()
     return EpisodePlanResult(

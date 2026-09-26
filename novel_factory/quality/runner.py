@@ -43,7 +43,10 @@ from novel_factory.quality.logic import check_logic
 from novel_factory.quality.reader import simulate_readers
 from novel_factory.quality.report import CheckResult, Issue, QualityReport, Severity
 from novel_factory.quality.style_check import check_hook, check_style
+from novel_factory.reference.service import linked_name_hashes
 from novel_factory.reference.similarity import FingerprintIndex, check_text
+from novel_factory.reference.similarity.names import find_reused_names, name_salt
+from novel_factory.text.sentence import split_sentences
 from novel_factory.text.tokens import syllables
 
 SIMILARITY = "Similarity"
@@ -51,11 +54,51 @@ SIMILARITY = "Similarity"
 NEXT_HEAD_CHARS = 600
 
 
-def check_similarity(episode: Episode, index: FingerprintIndex) -> CheckResult:
-    """장면별로 참고작 지문과 대조한다 (기획안 36번)."""
+def check_reference_names(
+    episode: Episode, name_hashes: dict[str, str], salt: bytes, result: CheckResult
+) -> None:
+    """참고작 인물 이름(전체 이름)이 원고에 나오는가 (기획안 36번 고유 설정 유사).
+
+    참고작의 주요 인물(주인공·주요조연·적대자) 이름이면 FAIL, 나머지 인물이면 WARN.
+    """
+    scenes = [str(s.get("text") or "") for s in (episode.scenes or [])] or [
+        episode.final_text or ""
+    ]
+    reported: set[str] = set()
+    for i, text in enumerate(scenes):
+        for word, level in find_reused_names(text, name_hashes, salt):
+            if word in reported:
+                continue
+            reported.add(word)
+            quote = next((s for s in split_sentences(text) if word in s), word)
+            result.issues.append(
+                Issue(
+                    SIMILARITY,
+                    "reference_name",
+                    Severity.FAIL if level == "main" else Severity.WARN,
+                    f"참고작 {'주요 ' if level == 'main' else ''}인물과 같은 이름 "
+                    f"'{word}'이(가) 나온다. 다른 이름으로 바꾼다.",
+                    quote,
+                    i if episode.scenes else None,
+                    {"name": word, "level": level},
+                )
+            )
+
+
+def check_similarity(
+    episode: Episode,
+    index: FingerprintIndex,
+    *,
+    name_hashes: dict[str, str] | None = None,
+    salt: bytes = b"",
+) -> CheckResult:
+    """장면별로 참고작 지문과 대조하고, 참고작 인물 이름 재사용을 본다 (기획안 36번)."""
     result = CheckResult(SIMILARITY)
+    if name_hashes:
+        check_reference_names(episode, name_hashes, salt, result)
     if not index.entries:
-        result.skipped = "연결된 참고작 지문이 없다."
+        if not name_hashes:
+            result.skipped = "연결된 참고작 지문이 없다."
         return result
     scenes = episode.scenes or []
     worst = 0.0
@@ -121,7 +164,14 @@ def run_checks(
     report.add(check_continuity(session, novel, episode))
     if logic:
         report.add(check_logic(session, novel, episode, provider, settings=cfg))
-    report.add(check_similarity(episode, similarity_index or FingerprintIndex()))
+    report.add(
+        check_similarity(
+            episode,
+            similarity_index or FingerprintIndex(),
+            name_hashes=linked_name_hashes(session, novel),
+            salt=name_salt(cfg),
+        )
+    )
     report.add(
         check_style(session, novel, episode, default_dialogue_ratio=guide.dialogue_ratio)
     )

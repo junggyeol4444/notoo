@@ -6,6 +6,7 @@ DB와 데이터 디렉터리를 테스트마다 임시 경로로 갈아끼운다
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -25,11 +26,23 @@ def _fixture_files() -> None:
         make_fixtures.main()
 
 
+#: 이 환경변수를 주면 SQLite 대신 그 DB로 테스트한다. 테스트마다 테이블을 지우고
+#: 새로 만든다. 예 (PostgreSQL + pgvector):
+#:   NF_TEST_DATABASE_URL=postgresql+psycopg://postgres@/nf_test?host=/tmp&port=5433
+#:   NF_TEST_VECTOR_BACKEND=pgvector
+TEST_DATABASE_URL = os.environ.get("NF_TEST_DATABASE_URL", "")
+TEST_VECTOR_BACKEND = os.environ.get("NF_TEST_VECTOR_BACKEND", "")
+
+
 @pytest.fixture
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from novel_factory.config import get_settings
 
-    monkeypatch.setenv("NF_DATABASE_URL", f"sqlite:///{tmp_path / 'test.db'}")
+    monkeypatch.setenv(
+        "NF_DATABASE_URL", TEST_DATABASE_URL or f"sqlite:///{tmp_path / 'test.db'}"
+    )
+    if TEST_VECTOR_BACKEND:
+        monkeypatch.setenv("NF_VECTOR_BACKEND", TEST_VECTOR_BACKEND)
     monkeypatch.setenv("NF_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("NF_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("NF_LLM_MODEL", raising=False)
@@ -45,6 +58,10 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     reset_engine()
     cfg = get_settings()
+    if TEST_DATABASE_URL:
+        from novel_factory.database.base import drop_all
+
+        drop_all(cfg)  # 앞 테스트가 남긴 테이블
     yield cfg
     reset_scheduler()
     reset_engine()
